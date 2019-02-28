@@ -12,3 +12,4 @@
 *.out
 /go/vendor/**
 !/go/vendor/vendor.json
+/examples/node_modules

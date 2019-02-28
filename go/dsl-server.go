@@ -7,13 +7,16 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"gopkg.in/yaml.v2"
 	"html/template"
 	_ "io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	_ "reflect"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var upgrader = websocket.Upgrader{}
@@ -294,5 +297,116 @@ func init() {
 			result = append(result, key)
 		}
 		return result, nil
+	}
+
+	DslFunctions["request"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		if args[0].rawArg.(string) == "get" {
+			evaluated, err := args[1].Evaluate(container)
+			if err != err {
+				return nil, err
+			}
+			url := evaluated.(string)
+			response, _ := http.Get(url)
+			defer response.Body.Close()
+			byteArray, _ := ioutil.ReadAll(response.Body)
+			if len(args) > 2 && args[2].rawArg.(string) == "json" {
+				var any interface{}
+				json.Unmarshal(byteArray, &any)
+				return any, nil
+			} else {
+				return string(byteArray), nil
+			}
+		} else {
+			return nil, nil
+		}
+	}
+
+	DslFunctions["timer"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		exitChannel := make(chan int)
+		go func() {
+			args[1].Evaluate(container)
+			ticker := time.NewTicker(time.Duration(args[0].rawArg.(int)) * time.Second)
+			for {
+				select {
+				case <-ticker.C:
+					args[1].Evaluate(container)
+				case <-exitChannel:
+					fmt.Println("exit timer")
+					return
+				}
+			}
+		}()
+		return exitChannel, nil
+	}
+
+	toUniqueSliceMap := map[string][]interface{}{}
+	toUniqueMapMap := map[string]map[interface{}]bool{}
+
+	DslFunctions["toUnique"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		kind, err := args[0].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		typedKind, ok := kind.(string)
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("toUnique 1st argument must be string. %v", kind))
+		}
+		capacity, err := args[2].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		typedCapacity, ok := capacity.(int)
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("toUnique 2nd argument must be int. %v", capacity))
+		}
+		if _, ok := toUniqueMapMap[typedKind]; !ok {
+			toUniqueMapMap[typedKind] = make(map[interface{}]bool, typedCapacity)
+			toUniqueSliceMap[typedKind] = make([]interface{}, typedCapacity)
+		}
+		kindMap := toUniqueMapMap[typedKind]
+		kindSlice := toUniqueSliceMap[typedKind]
+		evaluated, err := args[3].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		typedEvaluated, ok := evaluated.([]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("toUnique 2nd argument must be []interface{}. %v", evaluated))
+		}
+		result := []interface{}{}
+		for index, value := range typedEvaluated {
+			container["item"] = value
+			container["index"] = index
+			childEv, childErr := args[1].Evaluate(container)
+			if childErr != nil {
+				return nil, err
+			}
+			if _, ok := kindMap[childEv]; !ok {
+				var toRemove interface{}
+				toRemove, kindSlice = kindSlice[0], kindSlice[1:]
+				delete(kindMap, toRemove)
+				kindSlice = append(kindSlice, childEv)
+				kindMap[childEv] = true
+				result = append(result, value)
+			}
+		}
+		// TBD
+		delete(container, "item")
+		delete(container, "index")
+		return result, nil
+	}
+
+	DslFunctions["runYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		evaluated, err := args[0].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		var objInput map[interface{}]interface{}
+		yamlError := yaml.UnmarshalStrict([]byte(evaluated.(string)), &objInput)
+		if yamlError != nil {
+			fmt.Println("unmarshal error:", err)
+		}
+		go NewArgument(objInput).Evaluate(map[string]interface{}{})
+		return nil, nil
 	}
 }

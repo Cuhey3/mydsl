@@ -1,0 +1,6 @@
+- testsuite:
+  - always fail test
+  
+  - testcase:
+    - true
+    - false

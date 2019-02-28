@@ -1,12 +1,9 @@
 package mydsl
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -63,18 +60,18 @@ func toInterfaceSlice(any interface{}) []interface{} {
 	case []interface{}:
 		return typed
 	default:
-		if reflect.TypeOf(any).Kind() == reflect.Slice {
-			rv := reflect.MakeSlice(reflect.TypeOf(any), 0, 0)
-			rv = reflect.AppendSlice(rv, reflect.ValueOf(any))
-			result := []interface{}{}
-			for i := 0; i < rv.Len(); i++ {
-				result = append(result, rv.Index(i).Interface())
-			}
-			return result
+		// if reflect.TypeOf(any).Kind() == reflect.Slice {
+		// 	rv := reflect.MakeSlice(reflect.TypeOf(any), 0, 0)
+		// 	rv = reflect.AppendSlice(rv, reflect.ValueOf(any))
+		// 	result := []interface{}{}
+		// 	for i := 0; i < rv.Len(); i++ {
+		// 		result = append(result, rv.Index(i).Interface())
+		// 	}
+		// 	return result
 
-		} else {
-			return []interface{}{any}
-		}
+		// } else {
+		return []interface{}{any}
+		// }
 	}
 }
 
@@ -265,14 +262,6 @@ func asArray(any interface{}) []interface{} {
 	}
 }
 
-func mapMethod(this []interface{}, f func(interface{}) interface{}) []interface{} {
-	var mapped []interface{}
-	for _, item := range this {
-		mapped = append(mapped, f(item))
-	}
-	return mapped
-}
-
 func (this Argument) Evaluate(container map[string]interface{}) (interface{}, error) {
 	switch typedArg := this.rawArg.(type) {
 	case string:
@@ -410,7 +399,7 @@ func init() {
 		parentValue := lastKeyValue[1]
 		if len(args) > 0 {
 			_, ok := args[len(args)-1].rawArg.(string)
-			if ok {
+			if !ok {
 				var lastArg Argument
 				lastArg, args = args[len(args)-1], args[:len(args)-1]
 				evaluated, err := lastArg.Evaluate(container)
@@ -454,6 +443,8 @@ func init() {
 					}
 					switch typedCursor := cursor.(type) {
 					case map[interface{}]interface{}:
+						cursor = typedCursor[key.(string)]
+					case map[string]interface{}:
 						cursor = typedCursor[key.(string)]
 					case []interface{}:
 						cursor = typedCursor[key.(int)]
@@ -528,7 +519,8 @@ func init() {
 				fixedArguments[fixedKey] = evaluated
 			}
 		}
-		return func(args ...interface{}) (interface{}, error) {
+		//return func(args ...interface{}) (interface{}, error) {
+		return func(args ...interface{}) interface{} {
 			for i, argumentName := range argumentNames.([]interface{}) {
 				self[argumentName.(string)] = args[i]
 			}
@@ -538,11 +530,12 @@ func init() {
 			}
 			result, err := process.Evaluate(self)
 			if err != nil {
-				return nil, err
+				//return nil, err
+				return err
 			}
 			delete(self, "exit")
 			delete(self, "this")
-			return result, nil
+			return result
 		}, nil
 	}
 	DslFunctions["forEach"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
@@ -654,15 +647,12 @@ func init() {
 	}
 
 	DslFunctions["not"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		leftValueEvaluated, err := args[0].Evaluate(container)
+		result, err := DslFunctions["is"](container, args...)
 		if err != nil {
 			return nil, err
+		} else {
+			return !result.(bool), nil
 		}
-		rightValueEvaluated, err := args[1].Evaluate(container)
-		if err != nil {
-			return nil, err
-		}
-		return leftValueEvaluated != rightValueEvaluated, nil
 	}
 
 	DslFunctions["format"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
@@ -676,28 +666,6 @@ func init() {
 			formatString = strings.Replace(formatString, "%s", toString(evaluated), 1)
 		}
 		return formatString, nil
-	}
-
-	DslFunctions["request"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		if args[0].rawArg.(string) == "get" {
-			evaluated, err := args[1].Evaluate(container)
-			if err != err {
-				return nil, err
-			}
-			url := evaluated.(string)
-			response, _ := http.Get(url)
-			defer response.Body.Close()
-			byteArray, _ := ioutil.ReadAll(response.Body)
-			if len(args) > 2 && args[2].rawArg.(string) == "json" {
-				var any interface{}
-				json.Unmarshal(byteArray, &any)
-				return any, nil
-			} else {
-				return string(byteArray), nil
-			}
-		} else {
-			return nil, nil
-		}
 	}
 
 	DslFunctions["sequence"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
@@ -729,24 +697,6 @@ func init() {
 	DslFunctions["exit"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		container["exit"] = true
 		return nil, nil
-	}
-
-	DslFunctions["timer"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		exitChannel := make(chan int)
-		go func() {
-			args[1].Evaluate(container)
-			ticker := time.NewTicker(time.Duration(args[0].rawArg.(int)) * time.Second)
-			for {
-				select {
-				case <-ticker.C:
-					args[1].Evaluate(container)
-				case <-exitChannel:
-					fmt.Println("exit timer")
-					return
-				}
-			}
-		}()
-		return exitChannel, nil
 	}
 
 	DslFunctions["plus"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
@@ -875,20 +825,6 @@ func init() {
 		return nil, nil
 	}
 
-	DslFunctions["runYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		evaluated, err := args[0].Evaluate(container)
-		if err != nil {
-			return nil, err
-		}
-		var objInput map[interface{}]interface{}
-		yamlError := yaml.UnmarshalStrict([]byte(evaluated.(string)), &objInput)
-		if yamlError != nil {
-			fmt.Println("unmarshal error:", err)
-		}
-		go NewArgument(objInput).Evaluate(map[string]interface{}{})
-		return nil, nil
-	}
-
 	DslFunctions["parseYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
@@ -954,62 +890,7 @@ func init() {
 		}
 		return result, nil
 	}
-	toUniqueSliceMap := map[string][]interface{}{}
-	toUniqueMapMap := map[string]map[interface{}]bool{}
 
-	DslFunctions["toUnique"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		kind, err := args[0].Evaluate(container)
-		if err != nil {
-			return nil, err
-		}
-		typedKind, ok := kind.(string)
-		if !ok {
-			return nil, errors.New(fmt.Sprintf("toUnique 1st argument must be string. %v", kind))
-		}
-		capacity, err := args[2].Evaluate(container)
-		if err != nil {
-			return nil, err
-		}
-		typedCapacity, ok := capacity.(int)
-		if !ok {
-			return nil, errors.New(fmt.Sprintf("toUnique 2nd argument must be int. %v", capacity))
-		}
-		if _, ok := toUniqueMapMap[typedKind]; !ok {
-			toUniqueMapMap[typedKind] = make(map[interface{}]bool, typedCapacity)
-			toUniqueSliceMap[typedKind] = make([]interface{}, typedCapacity)
-		}
-		kindMap := toUniqueMapMap[typedKind]
-		kindSlice := toUniqueSliceMap[typedKind]
-		evaluated, err := args[3].Evaluate(container)
-		if err != nil {
-			return nil, err
-		}
-		typedEvaluated, ok := evaluated.([]interface{})
-		if !ok {
-			return nil, errors.New(fmt.Sprintf("toUnique 2nd argument must be []interface{}. %v", evaluated))
-		}
-		result := []interface{}{}
-		for index, value := range typedEvaluated {
-			container["item"] = value
-			container["index"] = index
-			childEv, childErr := args[1].Evaluate(container)
-			if childErr != nil {
-				return nil, err
-			}
-			if _, ok := kindMap[childEv]; !ok {
-				var toRemove interface{}
-				toRemove, kindSlice = kindSlice[0], kindSlice[1:]
-				delete(kindMap, toRemove)
-				kindSlice = append(kindSlice, childEv)
-				kindMap[childEv] = true
-				result = append(result, value)
-			}
-		}
-		// TBD
-		delete(container, "item")
-		delete(container, "index")
-		return result, nil
-	}
 	DslFunctions["regexp"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
@@ -1025,30 +906,148 @@ func init() {
 		}
 		return compiled, nil
 	}
+
 	DslFunctions["in"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
-		//fmt.Println("evaluatedError", evaluated, err)
 		if err != nil {
 			return nil, err
 		}
-		groupEvaluated, err := evaluateAll(args[1:], container)
-		//fmt.Println("groupEvaluated", groupEvaluated)
+		groupEvaluated, err := args[1].Evaluate(container)
 		if err != nil {
 			return nil, err
 		}
-		for _, groupValue := range groupEvaluated {
-			if regexpValue, ok := groupValue.(*regexp.Regexp); ok {
-				contain := regexpValue.MatchString(toString(evaluated))
-				if contain {
-					return true, nil
-				}
-			} else {
-				contain := evaluated == groupValue
-				if contain {
-					return true, nil
+		if typedGroupEvaluated, ok := groupEvaluated.([]interface{}); ok {
+			for _, groupValue := range typedGroupEvaluated {
+				if regexpValue, ok := groupValue.(*regexp.Regexp); ok {
+					contain := regexpValue.MatchString(toString(evaluated))
+					if contain {
+						return true, nil
+					}
+				} else {
+					contain := evaluated == groupValue
+					if contain {
+						return true, nil
+					}
 				}
 			}
+		} else {
+			fmt.Println("in: 2nd argument must be []interface{}.")
+			return nil, errors.New("in: 2nd argument must be []interface{}.")
 		}
 		return false, nil
+	}
+
+	DslFunctions["testsuite"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		allCase := 0
+		passedCase := 0
+		failedCase := 0
+		hasErrorCase := 0
+		suiteName := args[0].rawArg
+		container["suiteName"] = suiteName
+		args = args[1:]
+		result := []string{}
+		for _, arg := range args {
+			outputFlag := false
+			evaluated, err := arg.Evaluate(container)
+			if typedRawArg, ok := arg.rawArg.(map[interface{}]interface{}); ok {
+				if _, ok := typedRawArg["testcase"]; ok {
+					allCase++
+					switch typedEvaluated := evaluated.(type) {
+					case map[string]interface{}:
+						if passed, ok := typedEvaluated["passed"]; ok {
+							if typedPassed, ok := passed.(bool); ok && typedPassed {
+								passedCase++
+								//fmt.Println("passed", suiteName, allCase)
+							} else {
+								failedCase++
+								outputFlag = true
+								fmt.Println("failed", suiteName, allCase)
+								result = append(result, fmt.Sprintf("case %v", allCase))
+							}
+						}
+						if err != nil {
+							hasErrorCase++
+							outputFlag = true
+							result = append(result, fmt.Sprintf("%v %v has error", suiteName, allCase))
+						}
+						if outputFlag {
+							fmt.Println(suiteName, allCase)
+							fmt.Println(evaluated)
+						}
+					}
+				}
+
+			}
+		}
+		if len(result) > 0 {
+			return result, errors.New(fmt.Sprintf("testsuite: %v was failed.", suiteName))
+		} else {
+			return nil, nil
+		}
+	}
+
+	DslFunctions["testcase"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		testResult := map[string]interface{}{
+			"leftRaw":  args[0].rawArg,
+			"rightRaw": args[1].rawArg,
+			"passed":   false,
+		}
+		evaluated1, err := args[0].Evaluate(container)
+		if err != nil {
+			return testResult, err
+		}
+		testResult["leftEvaluated"] = evaluated1
+
+		evaluated2, err := args[1].Evaluate(container)
+		if err != nil {
+			return testResult, err
+		}
+		testResult["rightEvaluated"] = evaluated2
+		testResult["passed"] = evaluated1 == evaluated2
+		return testResult, nil
+	}
+
+	DslFunctions["slice"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		slice, err := args[0].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		length, err := args[1].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		typedLength, ok := length.(int)
+		if !ok {
+			return nil, errors.New("slice 2nd argument must be int.")
+		}
+		if typedSlice, ok := slice.([]interface{}); ok {
+			copied := make([]interface{}, typedLength)
+			copy(copied, typedSlice)
+			return copied, nil
+		} else {
+			return nil, errors.New("slice 1st argument must be []interface{}.")
+		}
+	}
+
+	DslFunctions["and"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		if len(args) == 0 {
+			return false, nil
+		}
+
+		for _, arg := range args {
+			evaluated, err := arg.Evaluate(container)
+			if err != nil {
+				return nil, err
+			}
+			if typedEvaluated, ok := evaluated.(bool); ok {
+				if !typedEvaluated {
+					return false, nil
+				}
+			} else {
+				fmt.Println(arg.rawArg)
+				return nil, errors.New("and: evaluated is not bool")
+			}
+		}
+		return true, nil
 	}
 }

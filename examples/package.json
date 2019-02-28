@@ -1,0 +1,19 @@
+{
+  "name": "mydsl",
+  "version": "0.0.1",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cuhey3/mydsl.git"
+  },
+  "author": "cuhey3",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cuhey3/mydsl/issues"
+  },
+  "homepage": "https://github.com/cuhey3/mydsl#readme"
+}
