@@ -675,7 +675,7 @@ func init() {
 		seqIndex := len(container["seqArray"].([]interface{}))
 		for _, arg := range args {
 			evaluated, err := arg.Evaluate(container)
-			if err != err {
+			if err != nil {
 				return nil, err
 			}
 			if evaluated != nil {
