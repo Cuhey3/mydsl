@@ -12,7 +12,11 @@ import (
 )
 
 type Argument struct {
-	rawArg interface{}
+	RawArg interface{}
+}
+
+func trySetValueToUnknownTypeOfSlice(any interface{}, index int, value interface{}) {
+	reflect.ValueOf(any).Index(index).Set(reflect.ValueOf(value))
 }
 
 func NewArgument(any interface{}) Argument {
@@ -149,7 +153,7 @@ func evaluateAll(args []Argument, container map[string]interface{}) ([]interface
 }
 
 func getLastKeyValue(container map[string]interface{}, arg Argument, root map[string]interface{}) ([]interface{}, error) {
-	rawArg := arg.rawArg
+	rawArg := arg.RawArg
 	rootIsNil := root == nil
 	if rootIsNil {
 		root = container
@@ -264,7 +268,7 @@ func asArray(any interface{}) []interface{} {
 }
 
 func (this Argument) Evaluate(container map[string]interface{}) (interface{}, error) {
-	switch typedArg := this.rawArg.(type) {
+	switch typedArg := this.RawArg.(type) {
 	case string:
 		if typedArg == "$" {
 			return container, nil
@@ -341,9 +345,9 @@ func (this Argument) Evaluate(container map[string]interface{}) (interface{}, er
 			return result, nil
 		}
 	default:
-		//fmt.Println("what?", reflect.TypeOf(this.rawArg), this.rawArg)
+		//fmt.Println("what?", reflect.TypeOf(this.RawArg), this.RawArg)
 	}
-	return this.rawArg, nil
+	return this.RawArg, nil
 }
 
 func init() {
@@ -375,7 +379,12 @@ func init() {
 			case string:
 				numKey, numOk := strconv.Atoi(typedKey)
 				if numOk == nil {
-					parentValue.([]interface{})[numKey] = evaluated
+					switch parentValue.(type) {
+					case []interface{}:
+						parentValue.([]interface{})[numKey] = evaluated
+					default:
+						trySetValueToUnknownTypeOfSlice(parentValue, numKey, evaluated)
+					}
 				} else {
 					parentValue.(map[string]interface{})[typedKey] = evaluated
 					//fmt.Println("here?", parentValue)
@@ -399,7 +408,7 @@ func init() {
 		defaultValue = nil
 		parentValue := lastKeyValue[1]
 		if len(args) > 0 {
-			_, ok := args[len(args)-1].rawArg.(string)
+			_, ok := args[len(args)-1].RawArg.(string)
 			if !ok {
 				var lastArg Argument
 				lastArg, args = args[len(args)-1], args[:len(args)-1]
@@ -509,10 +518,10 @@ func init() {
 	DslFunctions["function"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		self := container
 		fixedArguments := map[interface{}]interface{}{}
-		argumentNames := args[0].rawArg
+		argumentNames := args[0].RawArg
 		process := args[1]
 		if len(args) > 2 {
-			for _, fixedKey := range asArray(args[2].rawArg) {
+			for _, fixedKey := range asArray(args[2].RawArg) {
 				evaluated, err := Argument{"$." + (fixedKey.(string))}.Evaluate(self)
 				if err != nil {
 					return nil, err
@@ -547,7 +556,7 @@ func init() {
 		}
 		key := "item"
 		if len(args) > 2 {
-			key = args[2].rawArg.(string)
+			key = args[2].RawArg.(string)
 		}
 		slice := toInterfaceSlice(any)
 		for index, value := range slice {
@@ -565,7 +574,7 @@ func init() {
 		}
 		key := "item"
 		if len(args) > 2 {
-			key = args[2].rawArg.(string)
+			key = args[2].RawArg.(string)
 		}
 		result := []interface{}{}
 		slice := toInterfaceSlice(any)
@@ -596,7 +605,7 @@ func init() {
 		}
 		key := "item"
 		if len(args) > 2 {
-			key = args[2].rawArg.(string)
+			key = args[2].RawArg.(string)
 		}
 		result := []interface{}{}
 		slice := toInterfaceSlice(any)
@@ -657,7 +666,7 @@ func init() {
 	}
 
 	DslFunctions["format"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		formatString := args[0].rawArg.(string)
+		formatString := args[0].RawArg.(string)
 		args = args[1:]
 		for _, arg := range args {
 			evaluated, err := arg.Evaluate(container)
@@ -813,7 +822,7 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
-		switch args[0].rawArg {
+		switch args[0].RawArg {
 		case ">=":
 			return leftIntValue >= rightIntValue, nil
 		case "<=":
@@ -850,7 +859,7 @@ func init() {
 				return nil, err
 			}
 			if typedEvaluated, ok := evaluated.(bool); !ok {
-				return nil, errors.New(fmt.Sprintf("%v: %v is not bool type.", args[0].rawArg, typedEvaluated))
+				return nil, errors.New(fmt.Sprintf("%v: %v is not bool type.", args[0].RawArg, typedEvaluated))
 			} else {
 				if typedEvaluated {
 					sequence, err := args[1].Evaluate(container)
@@ -943,14 +952,14 @@ func init() {
 		passedCase := 0
 		failedCase := 0
 		hasErrorCase := 0
-		suiteName := args[0].rawArg
+		suiteName := args[0].RawArg
 		container["suiteName"] = suiteName
 		args = args[1:]
 		result := []string{}
 		for _, arg := range args {
 			outputFlag := false
 			evaluated, err := arg.Evaluate(container)
-			if typedRawArg, ok := arg.rawArg.(map[interface{}]interface{}); ok {
+			if typedRawArg, ok := arg.RawArg.(map[interface{}]interface{}); ok {
 				if _, ok := typedRawArg["testcase"]; ok {
 					allCase++
 					switch typedEvaluated := evaluated.(type) {
@@ -989,8 +998,8 @@ func init() {
 
 	DslFunctions["testcase"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		testResult := map[string]interface{}{
-			"leftRaw":  args[0].rawArg,
-			"rightRaw": args[1].rawArg,
+			"leftRaw":  args[0].RawArg,
+			"rightRaw": args[1].RawArg,
 			"passed":   false,
 		}
 		evaluated1, err := args[0].Evaluate(container)
@@ -1045,10 +1054,14 @@ func init() {
 					return false, nil
 				}
 			} else {
-				fmt.Println(arg.rawArg)
+				fmt.Println(arg.RawArg)
 				return nil, errors.New("and: evaluated is not bool")
 			}
 		}
 		return true, nil
+	}
+
+	DslFunctions["createSliceForTest"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+		return make([]int, args[0].RawArg.(int)), nil
 	}
 }

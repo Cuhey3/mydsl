@@ -22,10 +22,13 @@ func init() {
 	client, _ := mongo.NewClient(uriOption)
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
 	client.Connect(ctx)
+	MongoCollection := func(collectionName string) *mongo.Collection {
+		return client.Database(dbname).Collection(collectionName)
+	}
 
 	DslFunctions["mongoGet"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		collectionName := args[0].rawArg.(string)
-		collection := client.Database(dbname).Collection(collectionName)
+		collectionName := args[0].RawArg.(string)
+		collection := MongoCollection(collectionName)
 		cur, err := collection.Find(ctx, bson.D{})
 		if err != nil {
 			log.Fatal(err)
@@ -47,12 +50,12 @@ func init() {
 	}
 
 	DslFunctions["mongoInsert"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		collectionName := args[0].rawArg.(string)
+		collectionName := args[0].RawArg.(string)
 		obj, err := args[1].Evaluate(container)
 		if err != nil {
 			return nil, err
 		}
-		collection := client.Database(dbname).Collection(collectionName)
+		collection := MongoCollection(collectionName)
 		res, err := collection.InsertOne(ctx, obj)
 		if err != nil {
 			return nil, err
@@ -61,12 +64,12 @@ func init() {
 	}
 
 	DslFunctions["mongoReplace"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		collectionName := args[0].rawArg.(string)
+		collectionName := args[0].RawArg.(string)
 		obj, err := args[1].Evaluate(container)
 		if err != nil {
 			return nil, err
 		}
-		collection := client.Database(dbname).Collection(collectionName)
+		collection := MongoCollection(collectionName)
 		res := collection.FindOneAndReplace(ctx, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
 		return res, nil
 	}

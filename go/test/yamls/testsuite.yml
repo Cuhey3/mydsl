@@ -107,12 +107,28 @@
 - testsuite:
   - filter test
   - $array: [1, 2, 3]
-
+  - $slice:
+      createSliceForTest: 3
+  - "$slice[0]": 1
+  - "$slice[1]": 2
+  - "$slice[2]": 3
+  
   - testcase:
     - sequence:
       - $filtered:
           filter:
             - $array
+            - is:
+              - $item % 2
+              - 1
+      - len: $filtered
+    - 2
+  
+  - testcase:
+    - sequence:
+      - $filtered:
+          filter:
+            - $slice
             - is:
               - $item % 2
               - 1

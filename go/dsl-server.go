@@ -38,7 +38,7 @@ func init() {
 	DslFunctions["wsHandler"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
 		mux := container["router"].(*chi.Mux)
 
-		mux.Get(args[0].rawArg.(string), func(w http.ResponseWriter, r *http.Request) {
+		mux.Get(args[0].RawArg.(string), func(w http.ResponseWriter, r *http.Request) {
 			c, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
 				log.Print("upgrade:", err)
@@ -85,9 +85,9 @@ func init() {
 	}
 
 	DslFunctions["handler"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		method := args[0].rawArg
-		endpoint := args[1].rawArg
-		viewOrLogic := args[2].rawArg
+		method := args[0].RawArg
+		endpoint := args[1].RawArg
+		viewOrLogic := args[2].RawArg
 		if _, ok := viewOrLogic.(string); ok {
 			return nil, nil // TBD
 		} else {
@@ -129,7 +129,7 @@ func init() {
 		return nil, nil
 	}
 	DslFunctions["redirect"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		toRedirect := args[0].rawArg.(string)
+		toRedirect := args[0].RawArg.(string)
 		http.Redirect((container["res"].(http.ResponseWriter)), (container["req"].(*http.Request)), toRedirect, http.StatusMovedPermanently)
 		return nil, nil
 	}
@@ -218,7 +218,7 @@ func init() {
 				case data := <-channel:
 					newContainer := map[string]interface{}{"subscribe": data, "channelName": channelName}
 					if len(args) > 2 {
-						for _, key := range args[2].rawArg.([]interface{}) {
+						for _, key := range args[2].RawArg.([]interface{}) {
 							newContainer[key.(string)] = container[key.(string)]
 						}
 					}
@@ -300,7 +300,7 @@ func init() {
 	}
 
 	DslFunctions["request"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		if args[0].rawArg.(string) == "get" {
+		if args[0].RawArg.(string) == "get" {
 			evaluated, err := args[1].Evaluate(container)
 			if err != err {
 				return nil, err
@@ -309,7 +309,7 @@ func init() {
 			response, _ := http.Get(url)
 			defer response.Body.Close()
 			byteArray, _ := ioutil.ReadAll(response.Body)
-			if len(args) > 2 && args[2].rawArg.(string) == "json" {
+			if len(args) > 2 && args[2].RawArg.(string) == "json" {
 				var any interface{}
 				json.Unmarshal(byteArray, &any)
 				return any, nil
@@ -325,7 +325,7 @@ func init() {
 		exitChannel := make(chan int)
 		go func() {
 			args[1].Evaluate(container)
-			ticker := time.NewTicker(time.Duration(args[0].rawArg.(int)) * time.Second)
+			ticker := time.NewTicker(time.Duration(args[0].RawArg.(int)) * time.Second)
 			for {
 				select {
 				case <-ticker.C:
