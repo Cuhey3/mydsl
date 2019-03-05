@@ -60,18 +60,19 @@ func toInterfaceSlice(any interface{}) []interface{} {
 	case []interface{}:
 		return typed
 	default:
-		// if reflect.TypeOf(any).Kind() == reflect.Slice {
-		// 	rv := reflect.MakeSlice(reflect.TypeOf(any), 0, 0)
-		// 	rv = reflect.AppendSlice(rv, reflect.ValueOf(any))
-		// 	result := []interface{}{}
-		// 	for i := 0; i < rv.Len(); i++ {
-		// 		result = append(result, rv.Index(i).Interface())
-		// 	}
-		// 	return result
+		// native slice case
+		if reflect.TypeOf(any).Kind() == reflect.Slice {
+			rv := reflect.MakeSlice(reflect.TypeOf(any), 0, 0)
+			rv = reflect.AppendSlice(rv, reflect.ValueOf(any))
+			result := []interface{}{}
+			for i := 0; i < rv.Len(); i++ {
+				result = append(result, rv.Index(i).Interface())
+			}
+			return result
 
-		// } else {
-		return []interface{}{any}
-		// }
+		} else {
+			return []interface{}{any}
+		}
 	}
 }
 
