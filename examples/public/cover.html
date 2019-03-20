@@ -54,9 +54,9 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/cuhey3/mydsl/go/dsl-core.go (80.2%)</option>
+				<option value="file0">github.com/cuhey3/mydsl/go/dsl-core.go (80.6%)</option>
 				
-				<option value="file1">github.com/cuhey3/mydsl/go/dsl-mongo.go (22.0%)</option>
+				<option value="file1">github.com/cuhey3/mydsl/go/dsl-mongo.go (23.3%)</option>
 				
 				<option value="file2">github.com/cuhey3/mydsl/go/dsl-server.go (9.4%)</option>
 				
@@ -86,8 +86,12 @@ import (
 )
 
 type Argument struct {
-        rawArg interface{}
+        RawArg interface{}
 }
+
+func trySetValueToUnknownTypeOfSlice(any interface{}, index int, value interface{}) <span class="cov8" title="1">{
+        reflect.ValueOf(any).Index(index).Set(reflect.ValueOf(value))
+}</span>
 
 func NewArgument(any interface{}) Argument <span class="cov8" title="1">{
         switch value := any.(type) </span>{
@@ -134,18 +138,19 @@ func toInterfaceSlice(any interface{}) []interface{} <span class="cov8" title="1
         case []interface{}:<span class="cov8" title="1">
                 return typed</span>
         default:<span class="cov8" title="1">
-                // if reflect.TypeOf(any).Kind() == reflect.Slice {
-                //         rv := reflect.MakeSlice(reflect.TypeOf(any), 0, 0)
-                //         rv = reflect.AppendSlice(rv, reflect.ValueOf(any))
-                //         result := []interface{}{}
-                //         for i := 0; i &lt; rv.Len(); i++ {
-                //                 result = append(result, rv.Index(i).Interface())
-                //         }
-                //         return result
+                // native slice case
+                if reflect.TypeOf(any).Kind() == reflect.Slice </span><span class="cov8" title="1">{
+                        rv := reflect.MakeSlice(reflect.TypeOf(any), 0, 0)
+                        rv = reflect.AppendSlice(rv, reflect.ValueOf(any))
+                        result := []interface{}{}
+                        for i := 0; i &lt; rv.Len(); i++ </span><span class="cov8" title="1">{
+                                result = append(result, rv.Index(i).Interface())
+                        }</span>
+                        <span class="cov8" title="1">return result</span>
 
-                // } else {
-                return []interface{}{any}</span>
-                // }
+                } else<span class="cov8" title="1"> {
+                        return []interface{}{any}
+                }</span>
         }
 }
 
@@ -167,7 +172,7 @@ var comparePattern = regexp.MustCompile(`^([-$~\d][^ ]*?) *(&lt;=|&gt;=|&lt;|&gt
 var firstValuePattern = regexp.MustCompile(`^([^\[ \]\.]+)\.?(.+)$`)
 var nextKeyPattern = regexp.MustCompile(`^(\[([^\[\]]+)\]|([^\[\] \.]+))\.?(.*)$`)
 var dollerReplacePattern = regexp.MustCompile(`^(\$\.?)`)
-var DslFunctions = map[string]func(map[string]interface{}, ...Argument) (interface{}, error){}
+var DslFunctions = map[string]func(*map[string]interface{}, ...Argument) (interface{}, error){}
 var DslAvailableFunctions = map[string]interface{}{}
 
 func isFunc(any interface{}) bool <span class="cov8" title="1">{
@@ -208,7 +213,7 @@ func propertyGet(parent interface{}, key interface{}) (interface{}, error) <span
         <span class="cov0" title="0">return nil, errors.New("propertyGet error: key type is invalid.")</span>
 }
 
-func evaluateAll(args []Argument, container map[string]interface{}) ([]interface{}, error) <span class="cov8" title="1">{
+func evaluateAll(args []Argument, container *map[string]interface{}) ([]interface{}, error) <span class="cov8" title="1">{
         evaluated := make([]interface{}, len(args))
         for index, arg := range args </span><span class="cov8" title="1">{
                 evaluatedValue, err := arg.Evaluate(container)
@@ -221,11 +226,11 @@ func evaluateAll(args []Argument, container map[string]interface{}) ([]interface
         <span class="cov8" title="1">return evaluated, nil</span>
 }
 
-func getLastKeyValue(container map[string]interface{}, arg Argument, root map[string]interface{}) ([]interface{}, error) <span class="cov8" title="1">{
-        rawArg := arg.rawArg
+func getLastKeyValue(container *map[string]interface{}, arg Argument, root map[string]interface{}) ([]interface{}, error) <span class="cov8" title="1">{
+        rawArg := arg.RawArg
         rootIsNil := root == nil
         if rootIsNil </span><span class="cov8" title="1">{
-                root = container
+                root = *container
         }</span>
         <span class="cov8" title="1">switch rawArg.(type) </span>{
         case string:<span class="cov8" title="1">
@@ -265,12 +270,12 @@ func getLastKeyValue(container map[string]interface{}, arg Argument, root map[st
                                                 var nextKeyResult []interface{}
                                                 var err error
                                                 if arrayKeyStr != "" </span><span class="cov0" title="0">{
-                                                        nextKeyResult, err = getLastKeyValue(root, Argument{arrayKeyStr}, nil)
+                                                        nextKeyResult, err = getLastKeyValue(&amp;root, Argument{arrayKeyStr}, nil)
                                                         if err != nil </span><span class="cov0" title="0">{
                                                                 return nil, err
                                                         }</span>
                                                 } else<span class="cov8" title="1"> {
-                                                        nextKeyResult, err = getLastKeyValue(root, Argument{periodKeyStr}, nil)
+                                                        nextKeyResult, err = getLastKeyValue(&amp;root, Argument{periodKeyStr}, nil)
                                                         if err != nil </span><span class="cov0" title="0">{
                                                                 return nil, err
                                                         }</span>
@@ -336,8 +341,8 @@ func asArray(any interface{}) []interface{} <span class="cov8" title="1">{
         }</span>
 }
 
-func (this Argument) Evaluate(container map[string]interface{}) (interface{}, error) <span class="cov8" title="1">{
-        switch typedArg := this.rawArg.(type) </span>{
+func (this Argument) Evaluate(container *map[string]interface{}) (interface{}, error) <span class="cov8" title="1">{
+        switch typedArg := this.RawArg.(type) </span>{
         case string:<span class="cov8" title="1">
                 if typedArg == "$" </span><span class="cov8" title="1">{
                         return container, nil
@@ -414,13 +419,13 @@ func (this Argument) Evaluate(container map[string]interface{}) (interface{}, er
                         <span class="cov0" title="0">return result, nil</span>
                 }
         default:<span class="cov8" title="1"></span>
-                //fmt.Println("what?", reflect.TypeOf(this.rawArg), this.rawArg)
+                //fmt.Println("what?", reflect.TypeOf(this.RawArg), this.RawArg)
         }
-        <span class="cov8" title="1">return this.rawArg, nil</span>
+        <span class="cov8" title="1">return this.RawArg, nil</span>
 }
 
 func init() <span class="cov8" title="1">{
-        DslFunctions["print"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        DslFunctions["print"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 evaluated, err := evaluateAll(args, container)
                 if err == nil </span><span class="cov0" title="0">{
                         fmt.Println(evaluated...)
@@ -430,7 +435,7 @@ func init() <span class="cov8" title="1">{
                 }</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["set"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["set"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := args[1].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -448,8 +453,13 @@ func init() <span class="cov8" title="1">{
                         case string:<span class="cov8" title="1">
                                 numKey, numOk := strconv.Atoi(typedKey)
                                 if numOk == nil </span><span class="cov8" title="1">{
-                                        parentValue.([]interface{})[numKey] = evaluated
-                                }</span> else<span class="cov8" title="1"> {
+                                        switch parentValue.(type) </span>{
+                                        case []interface{}:<span class="cov8" title="1">
+                                                parentValue.([]interface{})[numKey] = evaluated</span>
+                                        default:<span class="cov8" title="1">
+                                                trySetValueToUnknownTypeOfSlice(parentValue, numKey, evaluated)</span>
+                                        }
+                                } else<span class="cov8" title="1"> {
                                         parentValue.(map[string]interface{})[typedKey] = evaluated
                                         //fmt.Println("here?", parentValue)
                                 }</span>
@@ -459,7 +469,7 @@ func init() <span class="cov8" title="1">{
                 }
                 <span class="cov8" title="1">return nil, nil</span>
         }
-        <span class="cov8" title="1">DslFunctions["get"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["get"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 var firstArg Argument
                 firstArg, args = args[0], args[1:]
                 lastKeyValue, err := getLastKeyValue(container, firstArg, nil)
@@ -468,11 +478,13 @@ func init() <span class="cov8" title="1">{
                         return nil, err
                 }</span>
                 <span class="cov8" title="1">key := lastKeyValue[0]
+                parentValue := lastKeyValue[1]
+
+                // get default value
                 var defaultValue interface{}
                 defaultValue = nil
-                parentValue := lastKeyValue[1]
                 if len(args) &gt; 0 </span><span class="cov8" title="1">{
-                        _, ok := args[len(args)-1].rawArg.(string)
+                        _, ok := args[len(args)-1].RawArg.(string)
                         if !ok </span><span class="cov8" title="1">{
                                 var lastArg Argument
                                 lastArg, args = args[len(args)-1], args[:len(args)-1]
@@ -500,6 +512,8 @@ func init() <span class="cov8" title="1">{
                                                         switch typedParentValue := parentValue.(type) </span>{
                                                         case map[string]interface{}:<span class="cov8" title="1">
                                                                 cursor = typedParentValue[typedKey]</span>
+                                                        case *map[string]interface{}:<span class="cov8" title="1">
+                                                                cursor = (*typedParentValue)[typedKey]</span>
                                                         default:<span class="cov8" title="1">
                                                                 cursor = parentValue.(map[interface{}]interface{})[typedKey]</span>
                                                         }
@@ -534,7 +548,7 @@ func init() <span class="cov8" title="1">{
                 }</span>
                 <span class="cov0" title="0">return nil, nil</span>
         }
-        <span class="cov8" title="1">DslFunctions["do"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["do"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 var firstArg Argument
                 firstArg, args = args[0], args[1:]
                 lastKeyValue, err := getLastKeyValue(container, firstArg, nil)
@@ -579,14 +593,15 @@ func init() <span class="cov8" title="1">{
                 }</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["function"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                self := container
+        <span class="cov8" title="1">DslFunctions["function"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                // ブランクcontainerを使用するべき
+                self := *container
                 fixedArguments := map[interface{}]interface{}{}
-                argumentNames := args[0].rawArg
+                argumentNames := args[0].RawArg
                 process := args[1]
                 if len(args) &gt; 2 </span><span class="cov8" title="1">{
-                        for _, fixedKey := range asArray(args[2].rawArg) </span><span class="cov8" title="1">{
-                                evaluated, err := Argument{"$." + (fixedKey.(string))}.Evaluate(self)
+                        for _, fixedKey := range asArray(args[2].RawArg) </span><span class="cov8" title="1">{
+                                evaluated, err := Argument{"$." + (fixedKey.(string))}.Evaluate(&amp;self)
                                 if err != nil </span><span class="cov0" title="0">{
                                         return nil, err
                                 }</span>
@@ -602,7 +617,7 @@ func init() <span class="cov8" title="1">{
                         for k, v := range fixedArguments </span><span class="cov8" title="1">{
                                 self[k.(string)] = v
                         }</span>
-                        <span class="cov8" title="1">result, err := process.Evaluate(self)
+                        <span class="cov8" title="1">result, err := process.Evaluate(&amp;self)
                         if err != nil </span><span class="cov0" title="0">{
                                 //return nil, err
                                 return err
@@ -612,33 +627,33 @@ func init() <span class="cov8" title="1">{
                         return result</span>
                 }, nil
         }
-        <span class="cov8" title="1">DslFunctions["forEach"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                _self := container
+        <span class="cov8" title="1">DslFunctions["forEach"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                _self := *container
                 any, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
                 <span class="cov8" title="1">key := "item"
                 if len(args) &gt; 2 </span><span class="cov8" title="1">{
-                        key = args[2].rawArg.(string)
+                        key = args[2].RawArg.(string)
                 }</span>
                 <span class="cov8" title="1">slice := toInterfaceSlice(any)
                 for index, value := range slice </span><span class="cov8" title="1">{
                         _self[key] = value
                         _self["index"] = index
-                        args[1].Evaluate(_self)
+                        args[1].Evaluate(&amp;_self)
                 }</span>
                 <span class="cov8" title="1">return nil, nil</span>
         }
-        <span class="cov8" title="1">DslFunctions["filter"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                _self := container
+        <span class="cov8" title="1">DslFunctions["filter"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                _self := *container
                 any, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
                 <span class="cov8" title="1">key := "item"
                 if len(args) &gt; 2 </span><span class="cov8" title="1">{
-                        key = args[2].rawArg.(string)
+                        key = args[2].RawArg.(string)
                 }</span>
                 <span class="cov8" title="1">result := []interface{}{}
                 slice := toInterfaceSlice(any)
@@ -646,7 +661,7 @@ func init() <span class="cov8" title="1">{
                 for index, value := range slice </span><span class="cov8" title="1">{
                         _self[key] = value
                         _self["index"] = index
-                        evaluated, err := args[1].Evaluate(_self)
+                        evaluated, err := args[1].Evaluate(&amp;_self)
                         if err != nil </span><span class="cov0" title="0">{
                                 return nil, err
                         }</span>
@@ -661,15 +676,15 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["map"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                _self := container
+        <span class="cov8" title="1">DslFunctions["map"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                _self := *container
                 any, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
                 <span class="cov8" title="1">key := "item"
                 if len(args) &gt; 2 </span><span class="cov8" title="1">{
-                        key = args[2].rawArg.(string)
+                        key = args[2].RawArg.(string)
                 }</span>
                 <span class="cov8" title="1">result := []interface{}{}
                 slice := toInterfaceSlice(any)
@@ -677,7 +692,7 @@ func init() <span class="cov8" title="1">{
                 for index, value := range slice </span><span class="cov8" title="1">{
                         _self[key] = value
                         _self["index"] = index
-                        evaluated, err := args[1].Evaluate(_self)
+                        evaluated, err := args[1].Evaluate(&amp;_self)
                         if err != nil </span><span class="cov0" title="0">{
                                 return nil, err
                         }</span>
@@ -695,7 +710,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["is"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["is"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 leftValueEvaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -720,7 +735,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return leftValueEvaluated == rightValueEvaluated, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["not"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["not"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 result, err := DslFunctions["is"](container, args...)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -729,8 +744,8 @@ func init() <span class="cov8" title="1">{
                 }</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["format"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                formatString := args[0].rawArg.(string)
+        <span class="cov8" title="1">DslFunctions["format"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                formatString := args[0].RawArg.(string)
                 args = args[1:]
                 for _, arg := range args </span><span class="cov8" title="1">{
                         evaluated, err := arg.Evaluate(container)
@@ -742,38 +757,38 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return formatString, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["sequence"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                if _, ok := container["seqArray"]; !ok </span><span class="cov8" title="1">{
-                        container["seqArray"] = []interface{}{}
+        <span class="cov8" title="1">DslFunctions["sequence"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                if _, ok := (*container)["seqArray"]; !ok </span><span class="cov8" title="1">{
+                        (*container)["seqArray"] = []interface{}{}
                 }</span>
-                <span class="cov8" title="1">seqIndex := len(container["seqArray"].([]interface{}))
+                <span class="cov8" title="1">seqIndex := len((*container)["seqArray"].([]interface{}))
                 for _, arg := range args </span><span class="cov8" title="1">{
                         evaluated, err := arg.Evaluate(container)
-                        if err != err </span><span class="cov0" title="0">{
+                        if err != nil </span><span class="cov0" title="0">{
                                 return nil, err
                         }</span>
                         <span class="cov8" title="1">if evaluated != nil </span><span class="cov8" title="1">{
                                 //fmt.Println("sequence 1", arg, evaluated)
-                                container["seq"] = evaluated
-                                if len(container["seqArray"].([]interface{})) == seqIndex </span><span class="cov8" title="1">{
-                                        container["seqArray"] = append(container["seqArray"].([]interface{}), nil)
+                                (*container)["seq"] = evaluated
+                                if len((*container)["seqArray"].([]interface{})) == seqIndex </span><span class="cov8" title="1">{
+                                        (*container)["seqArray"] = append((*container)["seqArray"].([]interface{}), nil)
                                 }</span>
-                                <span class="cov8" title="1">(container["seqArray"].([]interface{}))[seqIndex] = evaluated</span>
+                                <span class="cov8" title="1">((*container)["seqArray"].([]interface{}))[seqIndex] = evaluated</span>
                         }
-                        <span class="cov8" title="1">if exit, _ := container["exit"]; exit == true </span><span class="cov8" title="1">{
+                        <span class="cov8" title="1">if exit, _ := (*container)["exit"]; exit == true </span><span class="cov8" title="1">{
                                 break</span>
                         }
                 }
-                <span class="cov8" title="1">container["seqArray"] = (container["seqArray"].([]interface{}))[0:seqIndex]
-                return container["seq"], nil</span>
+                <span class="cov8" title="1">(*container)["seqArray"] = ((*container)["seqArray"].([]interface{}))[0:seqIndex]
+                return (*container)["seq"], nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["exit"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
-                container["exit"] = true
+        <span class="cov8" title="1">DslFunctions["exit"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                (*container)["exit"] = true
                 return nil, nil
         }</span>
 
-        <span class="cov8" title="1">DslFunctions["plus"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["plus"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := evaluateAll(args, container)
                 if err != err </span><span class="cov0" title="0">{
                         return nil, err
@@ -789,7 +804,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["minus"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["minus"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := evaluateAll(args, container)
                 if err != err </span><span class="cov0" title="0">{
                         return nil, err
@@ -810,7 +825,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["multiply"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["multiply"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := evaluateAll(args, container)
                 if err != err </span><span class="cov0" title="0">{
                         return nil, err
@@ -826,7 +841,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["divide"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["divide"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := evaluateAll(args, container)
                 if err != err </span><span class="cov0" title="0">{
                         return nil, err
@@ -847,7 +862,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["mod"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["mod"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := evaluateAll(args, container)
                 if err != err </span><span class="cov0" title="0">{
                         return nil, err
@@ -868,7 +883,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["compare"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["compare"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 var leftIntValue, rightIntValue int
                 leftEvaluated, err := args[1].Evaluate(container)
                 if err != err </span><span class="cov0" title="0">{
@@ -886,7 +901,7 @@ func init() <span class="cov8" title="1">{
                 if err != nil </span><span class="cov0" title="0">{
                         panic(err)</span>
                 }
-                <span class="cov8" title="1">switch args[0].rawArg </span>{
+                <span class="cov8" title="1">switch args[0].RawArg </span>{
                 case "&gt;=":<span class="cov8" title="1">
                         return leftIntValue &gt;= rightIntValue, nil</span>
                 case "&lt;=":<span class="cov8" title="1">
@@ -899,7 +914,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">return nil, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["parseYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["parseYaml"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -912,18 +927,18 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return objInput, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["now"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["now"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 return int(time.Now().UnixNano() / int64(time.Millisecond)), nil
         }</span>
 
-        <span class="cov8" title="1">DslFunctions["when"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["when"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 for len(args) &gt; 0 </span><span class="cov8" title="1">{
                         evaluated, err := args[0].Evaluate(container)
                         if err != nil </span><span class="cov0" title="0">{
                                 return nil, err
                         }</span>
                         <span class="cov8" title="1">if typedEvaluated, ok := evaluated.(bool); !ok </span><span class="cov0" title="0">{
-                                return nil, errors.New(fmt.Sprintf("%v: %v is not bool type.", args[0].rawArg, typedEvaluated))
+                                return nil, errors.New(fmt.Sprintf("%v: %v is not bool type.", args[0].RawArg, typedEvaluated))
                         }</span> else<span class="cov8" title="1"> {
                                 if typedEvaluated </span><span class="cov8" title="1">{
                                         sequence, err := args[1].Evaluate(container)
@@ -940,7 +955,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">return nil, errors.New(fmt.Sprintf("DslFunctions.when: no match (%v)", args))</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["len"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["len"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -948,7 +963,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return reflect.ValueOf(evaluated).Len(), nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["reverse"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["reverse"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -965,7 +980,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["regexp"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["regexp"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -981,7 +996,7 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return compiled, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["in"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["in"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1011,19 +1026,19 @@ func init() <span class="cov8" title="1">{
                 <span class="cov8" title="1">return false, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["testsuite"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["testsuite"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 allCase := 0
                 passedCase := 0
                 failedCase := 0
                 hasErrorCase := 0
-                suiteName := args[0].rawArg
-                container["suiteName"] = suiteName
+                suiteName := args[0].RawArg
+                (*container)["suiteName"] = suiteName
                 args = args[1:]
                 result := []string{}
                 for _, arg := range args </span><span class="cov8" title="1">{
                         outputFlag := false
                         evaluated, err := arg.Evaluate(container)
-                        if typedRawArg, ok := arg.rawArg.(map[interface{}]interface{}); ok </span><span class="cov8" title="1">{
+                        if typedRawArg, ok := arg.RawArg.(map[interface{}]interface{}); ok </span><span class="cov8" title="1">{
                                 if _, ok := typedRawArg["testcase"]; ok </span><span class="cov8" title="1">{
                                         allCase++
                                         switch typedEvaluated := evaluated.(type) </span>{
@@ -1060,10 +1075,10 @@ func init() <span class="cov8" title="1">{
                 }</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["testcase"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["testcase"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 testResult := map[string]interface{}{
-                        "leftRaw":  args[0].rawArg,
-                        "rightRaw": args[1].rawArg,
+                        "leftRaw":  args[0].RawArg,
+                        "rightRaw": args[1].RawArg,
                         "passed":   false,
                 }
                 evaluated1, err := args[0].Evaluate(container)
@@ -1081,7 +1096,7 @@ func init() <span class="cov8" title="1">{
                 return testResult, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["slice"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["slice"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 slice, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1103,7 +1118,7 @@ func init() <span class="cov8" title="1">{
                 }</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["and"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">DslFunctions["and"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
                 if len(args) == 0 </span><span class="cov8" title="1">{
                         return false, nil
                 }</span>
@@ -1118,12 +1133,16 @@ func init() <span class="cov8" title="1">{
                                         return false, nil
                                 }</span>
                         } else<span class="cov0" title="0"> {
-                                fmt.Println(arg.rawArg)
+                                fmt.Println(arg.RawArg)
                                 return nil, errors.New("and: evaluated is not bool")
                         }</span>
                 }
                 <span class="cov8" title="1">return true, nil</span>
         }
+
+        <span class="cov8" title="1">DslFunctions["createSliceForTest"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                return make([]int, args[0].RawArg.(int)), nil
+        }</span>
 }
 </pre>
 		
@@ -1151,10 +1170,13 @@ func init() <span class="cov8" title="1">{
         client, _ := mongo.NewClient(uriOption)
         ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
         client.Connect(ctx)
+        MongoCollection := func(collectionName string) *mongo.Collection </span><span class="cov0" title="0">{
+                return client.Database(dbname).Collection(collectionName)
+        }</span>
 
-        DslFunctions["mongoGet"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                collectionName := args[0].rawArg.(string)
-                collection := client.Database(dbname).Collection(collectionName)
+        <span class="cov8" title="1">DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                collectionName := args[0].RawArg.(string)
+                collection := MongoCollection(collectionName)
                 cur, err := collection.Find(ctx, bson.D{})
                 if err != nil </span><span class="cov0" title="0">{
                         log.Fatal(err)
@@ -1175,13 +1197,13 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">return records, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["mongoInsert"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                collectionName := args[0].rawArg.(string)
+        <span class="cov8" title="1">DslFunctions["mongoInsert"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                collectionName := args[0].RawArg.(string)
                 obj, err := args[1].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov0" title="0">collection := client.Database(dbname).Collection(collectionName)
+                <span class="cov0" title="0">collection := MongoCollection(collectionName)
                 res, err := collection.InsertOne(ctx, obj)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1189,13 +1211,13 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">return res, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["mongoReplace"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                collectionName := args[0].rawArg.(string)
+        <span class="cov8" title="1">DslFunctions["mongoReplace"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                collectionName := args[0].RawArg.(string)
                 obj, err := args[1].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov0" title="0">collection := client.Database(dbname).Collection(collectionName)
+                <span class="cov0" title="0">collection := MongoCollection(collectionName)
                 res := collection.FindOneAndReplace(ctx, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
                 return res, nil</span>
         }
@@ -1239,10 +1261,10 @@ func init() <span class="cov8" title="1">{
         DslAvailableFunctions["chi.URLParam"] = chi.URLParam
         DslAvailableFunctions["http.ListenAndServe"] = http.ListenAndServe
 
-        DslFunctions["wsHandler"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                mux := container["router"].(*chi.Mux)
+        DslFunctions["wsHandler"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                mux := (*container)["router"].(*chi.Mux)
 
-                mux.Get(args[0].rawArg.(string), func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                mux.Get(args[0].RawArg.(string), func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
                         c, err := upgrader.Upgrade(w, r, nil)
                         if err != nil </span><span class="cov0" title="0">{
                                 log.Print("upgrade:", err)
@@ -1262,19 +1284,19 @@ func init() <span class="cov8" title="1">{
                                         fmt.Println("unmarshal error", err, data)
                                         break</span>
                                 }
-                                <span class="cov0" title="0">args[1].Evaluate(newContainer)</span>
+                                <span class="cov0" title="0">args[1].Evaluate(&amp;newContainer)</span>
                         }
                         <span class="cov0" title="0">defer func() </span><span class="cov0" title="0">{
                                 c.Close()
-                                args[2].Evaluate(newContainer)
+                                args[2].Evaluate(&amp;newContainer)
                         }</span>()
 
                 })
                 <span class="cov0" title="0">return nil, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["wsWrite"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                conn := container["conn"].(*websocket.Conn)
+        <span class="cov8" title="1">DslFunctions["wsWrite"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                conn := (*container)["conn"].(*websocket.Conn)
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1288,59 +1310,59 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">return nil, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["handler"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                method := args[0].rawArg
-                endpoint := args[1].rawArg
-                viewOrLogic := args[2].rawArg
+        <span class="cov8" title="1">DslFunctions["handler"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                method := args[0].RawArg
+                endpoint := args[1].RawArg
+                viewOrLogic := args[2].RawArg
                 if _, ok := viewOrLogic.(string); ok </span><span class="cov0" title="0">{
                         return nil, nil // TBD
                 }</span> else<span class="cov0" title="0"> {
                         if method == "get" </span><span class="cov0" title="0">{
-                                (container["router"].(*chi.Mux)).Get(endpoint.(string), func(res http.ResponseWriter, req *http.Request) </span><span class="cov0" title="0">{
+                                ((*container)["router"].(*chi.Mux)).Get(endpoint.(string), func(res http.ResponseWriter, req *http.Request) </span><span class="cov0" title="0">{
                                         newContainer := map[string]interface{}{"req": req, "res": res}
-                                        args[2].Evaluate(newContainer)
+                                        args[2].Evaluate(&amp;newContainer)
                                 }</span>)
                                 <span class="cov0" title="0">return nil, nil</span>
                         } else<span class="cov0" title="0"> {
-                                (container["router"].(*chi.Mux)).Post(endpoint.(string), func(res http.ResponseWriter, req *http.Request) </span><span class="cov0" title="0">{
+                                ((*container)["router"].(*chi.Mux)).Post(endpoint.(string), func(res http.ResponseWriter, req *http.Request) </span><span class="cov0" title="0">{
                                         newContainer := map[string]interface{}{"req": req, "res": res}
-                                        args[2].Evaluate(newContainer)
+                                        args[2].Evaluate(&amp;newContainer)
                                 }</span>)
                                 <span class="cov0" title="0">return nil, nil</span> // TBD
                         }
                 }
         }
 
-        <span class="cov8" title="1">DslFunctions["send"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["send"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov0" title="0">(container["res"].(http.ResponseWriter)).Write([]byte(evaluated.(string))) // TBD
+                <span class="cov0" title="0">((*container)["res"].(http.ResponseWriter)).Write([]byte(evaluated.(string))) // TBD
                 return nil, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["render"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["render"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 evaluated, err := args[0].Evaluate(container)
                 templateArgument, err := args[1].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
                 <span class="cov0" title="0">t, err := template.New("titleTest").Funcs(templateFuncs).ParseFiles("templates/" + evaluated.(string))
-                if err := t.ExecuteTemplate((container["res"].(http.ResponseWriter)), evaluated.(string), templateArgument); err != nil </span>{<span class="cov0" title="0">
+                if err := t.ExecuteTemplate(((*container)["res"].(http.ResponseWriter)), evaluated.(string), templateArgument); err != nil </span>{<span class="cov0" title="0">
                         // log.Fatal(err)
                 }</span>
                 <span class="cov0" title="0">return nil, nil</span>
         }
-        <span class="cov8" title="1">DslFunctions["redirect"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                toRedirect := args[0].rawArg.(string)
-                http.Redirect((container["res"].(http.ResponseWriter)), (container["req"].(*http.Request)), toRedirect, http.StatusMovedPermanently)
+        <span class="cov8" title="1">DslFunctions["redirect"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                toRedirect := args[0].RawArg.(string)
+                http.Redirect(((*container)["res"].(http.ResponseWriter)), ((*container)["req"].(*http.Request)), toRedirect, http.StatusMovedPermanently)
                 return nil, nil
         }</span>
 
         <span class="cov8" title="1">var processes = map[string]chan int{}
         var processIdPattern = regexp.MustCompile(`^(.+)(\d{13})$`)
-        DslFunctions["processStart"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        DslFunctions["processStart"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 processId, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1352,7 +1374,7 @@ func init() <span class="cov8" title="1">{
                         }</span>
                         <span class="cov0" title="0">gochan := make(chan int)
                         go func() </span><span class="cov0" title="0">{
-                                result, err := NewArgument(dsl).Evaluate(map[string]interface{}{})
+                                result, err := NewArgument(dsl).Evaluate(&amp;map[string]interface{}{})
                                 if err == nil </span><span class="cov0" title="0">{
                                         if typedResult, ok := result.(chan int); ok </span><span class="cov0" title="0">{
                                                 processes[processId.(string)] = typedResult
@@ -1367,7 +1389,7 @@ func init() <span class="cov8" title="1">{
                 }
                 <span class="cov0" title="0">return nil, nil</span>
         }
-        <span class="cov8" title="1">DslFunctions["processKill"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["processKill"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 processId, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1386,7 +1408,7 @@ func init() <span class="cov8" title="1">{
                 return nil, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["processes"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["processes"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 result := map[interface{}][]string{}
                 for key, _ := range processes </span><span class="cov0" title="0">{
                         match := processIdPattern.FindStringSubmatch(key)
@@ -1405,7 +1427,7 @@ func init() <span class="cov8" title="1">{
 
         <span class="cov8" title="1">pubsubChannels := map[string][]chan interface{}{}
 
-        DslFunctions["subscribe"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        DslFunctions["subscribe"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 exitChannel := make(chan int)
                 channel := make(chan interface{})
                 evaluated, err := args[0].Evaluate(container)
@@ -1422,11 +1444,11 @@ func init() <span class="cov8" title="1">{
                                 case data := &lt;-channel:<span class="cov0" title="0">
                                         newContainer := map[string]interface{}{"subscribe": data, "channelName": channelName}
                                         if len(args) &gt; 2 </span><span class="cov0" title="0">{
-                                                for _, key := range args[2].rawArg.([]interface{}) </span><span class="cov0" title="0">{
-                                                        newContainer[key.(string)] = container[key.(string)]
+                                                for _, key := range args[2].RawArg.([]interface{}) </span><span class="cov0" title="0">{
+                                                        newContainer[key.(string)] = (*container)[key.(string)]
                                                 }</span>
                                         }
-                                        <span class="cov0" title="0">args[1].Evaluate(newContainer)</span>
+                                        <span class="cov0" title="0">args[1].Evaluate(&amp;newContainer)</span>
                                 case &lt;-exitChannel:<span class="cov0" title="0">
                                         channels := pubsubChannels[channelName]
                                         removed := []chan interface{}{}
@@ -1454,14 +1476,14 @@ func init() <span class="cov8" title="1">{
                                                 "channelList",
                                                 map[interface{}]interface{}{"channelList": nil},
                                         },
-                                }).Evaluate(map[string]interface{}{})
+                                }).Evaluate(&amp;map[string]interface{}{})
                         }</span>
                 }
                 <span class="cov0" title="0">fmt.Println("add subscribe channels", pubsubChannels)
                 return exitChannel, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["publish"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["publish"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 channelName, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1490,12 +1512,12 @@ func init() <span class="cov8" title="1">{
                                                 "channelList",
                                                 map[interface{}]interface{}{"channelList": nil},
                                         },
-                                }).Evaluate(map[string]interface{}{})
+                                }).Evaluate(&amp;map[string]interface{}{})
                         }</span>
                 }
                 <span class="cov0" title="0">return nil, nil</span>
         }
-        <span class="cov8" title="1">DslFunctions["channelList"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["channelList"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 result := []string{}
                 for key, _ := range pubsubChannels </span><span class="cov0" title="0">{
                         result = append(result, key)
@@ -1503,8 +1525,8 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["request"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                if args[0].rawArg.(string) == "get" </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["request"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                if args[0].RawArg.(string) == "get" </span><span class="cov0" title="0">{
                         evaluated, err := args[1].Evaluate(container)
                         if err != err </span><span class="cov0" title="0">{
                                 return nil, err
@@ -1513,7 +1535,7 @@ func init() <span class="cov8" title="1">{
                         response, _ := http.Get(url)
                         defer response.Body.Close()
                         byteArray, _ := ioutil.ReadAll(response.Body)
-                        if len(args) &gt; 2 &amp;&amp; args[2].rawArg.(string) == "json" </span><span class="cov0" title="0">{
+                        if len(args) &gt; 2 &amp;&amp; args[2].RawArg.(string) == "json" </span><span class="cov0" title="0">{
                                 var any interface{}
                                 json.Unmarshal(byteArray, &amp;any)
                                 return any, nil
@@ -1525,11 +1547,11 @@ func init() <span class="cov8" title="1">{
                 }</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["timer"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["timer"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 exitChannel := make(chan int)
                 go func() </span><span class="cov0" title="0">{
                         args[1].Evaluate(container)
-                        ticker := time.NewTicker(time.Duration(args[0].rawArg.(int)) * time.Second)
+                        ticker := time.NewTicker(time.Duration(args[0].RawArg.(int)) * time.Second)
                         for </span><span class="cov0" title="0">{
                                 select </span>{
                                 case &lt;-ticker.C:<span class="cov0" title="0">
@@ -1546,7 +1568,7 @@ func init() <span class="cov8" title="1">{
         <span class="cov8" title="1">toUniqueSliceMap := map[string][]interface{}{}
         toUniqueMapMap := map[string]map[interface{}]bool{}
 
-        DslFunctions["toUnique"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        DslFunctions["toUnique"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 kind, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1579,8 +1601,8 @@ func init() <span class="cov8" title="1">{
                 }</span>
                 <span class="cov0" title="0">result := []interface{}{}
                 for index, value := range typedEvaluated </span><span class="cov0" title="0">{
-                        container["item"] = value
-                        container["index"] = index
+                        (*container)["item"] = value
+                        (*container)["index"] = index
                         childEv, childErr := args[1].Evaluate(container)
                         if childErr != nil </span><span class="cov0" title="0">{
                                 return nil, err
@@ -1595,12 +1617,12 @@ func init() <span class="cov8" title="1">{
                         }</span>
                 }
                 // TBD
-                <span class="cov0" title="0">delete(container, "item")
-                delete(container, "index")
+                <span class="cov0" title="0">delete((*container), "item")
+                delete((*container), "index")
                 return result, nil</span>
         }
 
-        <span class="cov8" title="1">DslFunctions["runYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">DslFunctions["runYaml"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 evaluated, err := args[0].Evaluate(container)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
@@ -1610,7 +1632,7 @@ func init() <span class="cov8" title="1">{
                 if yamlError != nil </span><span class="cov0" title="0">{
                         fmt.Println("unmarshal error:", err)
                 }</span>
-                <span class="cov0" title="0">go NewArgument(objInput).Evaluate(map[string]interface{}{})
+                <span class="cov0" title="0">go NewArgument(objInput).Evaluate(&amp;map[string]interface{}{})
                 return nil, nil</span>
         }
 }

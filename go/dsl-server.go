@@ -35,8 +35,8 @@ func init() {
 	DslAvailableFunctions["chi.URLParam"] = chi.URLParam
 	DslAvailableFunctions["http.ListenAndServe"] = http.ListenAndServe
 
-	DslFunctions["wsHandler"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		mux := container["router"].(*chi.Mux)
+	DslFunctions["wsHandler"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		mux := (*container)["router"].(*chi.Mux)
 
 		mux.Get(args[0].RawArg.(string), func(w http.ResponseWriter, r *http.Request) {
 			c, err := upgrader.Upgrade(w, r, nil)
@@ -58,19 +58,19 @@ func init() {
 					fmt.Println("unmarshal error", err, data)
 					break
 				}
-				args[1].Evaluate(newContainer)
+				args[1].Evaluate(&newContainer)
 			}
 			defer func() {
 				c.Close()
-				args[2].Evaluate(newContainer)
+				args[2].Evaluate(&newContainer)
 			}()
 
 		})
 		return nil, nil
 	}
 
-	DslFunctions["wsWrite"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		conn := container["conn"].(*websocket.Conn)
+	DslFunctions["wsWrite"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		conn := (*container)["conn"].(*websocket.Conn)
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -84,7 +84,7 @@ func init() {
 		return nil, nil
 	}
 
-	DslFunctions["handler"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["handler"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		method := args[0].RawArg
 		endpoint := args[1].RawArg
 		viewOrLogic := args[2].RawArg
@@ -92,51 +92,51 @@ func init() {
 			return nil, nil // TBD
 		} else {
 			if method == "get" {
-				(container["router"].(*chi.Mux)).Get(endpoint.(string), func(res http.ResponseWriter, req *http.Request) {
+				((*container)["router"].(*chi.Mux)).Get(endpoint.(string), func(res http.ResponseWriter, req *http.Request) {
 					newContainer := map[string]interface{}{"req": req, "res": res}
-					args[2].Evaluate(newContainer)
+					args[2].Evaluate(&newContainer)
 				})
 				return nil, nil
 			} else {
-				(container["router"].(*chi.Mux)).Post(endpoint.(string), func(res http.ResponseWriter, req *http.Request) {
+				((*container)["router"].(*chi.Mux)).Post(endpoint.(string), func(res http.ResponseWriter, req *http.Request) {
 					newContainer := map[string]interface{}{"req": req, "res": res}
-					args[2].Evaluate(newContainer)
+					args[2].Evaluate(&newContainer)
 				})
 				return nil, nil // TBD
 			}
 		}
 	}
 
-	DslFunctions["send"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["send"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
 		}
-		(container["res"].(http.ResponseWriter)).Write([]byte(evaluated.(string))) // TBD
+		((*container)["res"].(http.ResponseWriter)).Write([]byte(evaluated.(string))) // TBD
 		return nil, nil
 	}
 
-	DslFunctions["render"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["render"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		templateArgument, err := args[1].Evaluate(container)
 		if err != nil {
 			return nil, err
 		}
 		t, err := template.New("titleTest").Funcs(templateFuncs).ParseFiles("templates/" + evaluated.(string))
-		if err := t.ExecuteTemplate((container["res"].(http.ResponseWriter)), evaluated.(string), templateArgument); err != nil {
+		if err := t.ExecuteTemplate(((*container)["res"].(http.ResponseWriter)), evaluated.(string), templateArgument); err != nil {
 			// log.Fatal(err)
 		}
 		return nil, nil
 	}
-	DslFunctions["redirect"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["redirect"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		toRedirect := args[0].RawArg.(string)
-		http.Redirect((container["res"].(http.ResponseWriter)), (container["req"].(*http.Request)), toRedirect, http.StatusMovedPermanently)
+		http.Redirect(((*container)["res"].(http.ResponseWriter)), ((*container)["req"].(*http.Request)), toRedirect, http.StatusMovedPermanently)
 		return nil, nil
 	}
 
 	var processes = map[string]chan int{}
 	var processIdPattern = regexp.MustCompile(`^(.+)(\d{13})$`)
-	DslFunctions["processStart"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["processStart"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		processId, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -148,7 +148,7 @@ func init() {
 			}
 			gochan := make(chan int)
 			go func() {
-				result, err := NewArgument(dsl).Evaluate(map[string]interface{}{})
+				result, err := NewArgument(dsl).Evaluate(&map[string]interface{}{})
 				if err == nil {
 					if typedResult, ok := result.(chan int); ok {
 						processes[processId.(string)] = typedResult
@@ -163,7 +163,7 @@ func init() {
 		}
 		return nil, nil
 	}
-	DslFunctions["processKill"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["processKill"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		processId, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -182,7 +182,7 @@ func init() {
 		return nil, nil
 	}
 
-	DslFunctions["processes"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["processes"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		result := map[interface{}][]string{}
 		for key, _ := range processes {
 			match := processIdPattern.FindStringSubmatch(key)
@@ -201,7 +201,7 @@ func init() {
 
 	pubsubChannels := map[string][]chan interface{}{}
 
-	DslFunctions["subscribe"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["subscribe"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		exitChannel := make(chan int)
 		channel := make(chan interface{})
 		evaluated, err := args[0].Evaluate(container)
@@ -219,10 +219,10 @@ func init() {
 					newContainer := map[string]interface{}{"subscribe": data, "channelName": channelName}
 					if len(args) > 2 {
 						for _, key := range args[2].RawArg.([]interface{}) {
-							newContainer[key.(string)] = container[key.(string)]
+							newContainer[key.(string)] = (*container)[key.(string)]
 						}
 					}
-					args[1].Evaluate(newContainer)
+					args[1].Evaluate(&newContainer)
 				case <-exitChannel:
 					channels := pubsubChannels[channelName]
 					removed := []chan interface{}{}
@@ -250,14 +250,14 @@ func init() {
 						"channelList",
 						map[interface{}]interface{}{"channelList": nil},
 					},
-				}).Evaluate(map[string]interface{}{})
+				}).Evaluate(&map[string]interface{}{})
 			}
 		}
 		fmt.Println("add subscribe channels", pubsubChannels)
 		return exitChannel, nil
 	}
 
-	DslFunctions["publish"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["publish"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		channelName, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -286,12 +286,12 @@ func init() {
 						"channelList",
 						map[interface{}]interface{}{"channelList": nil},
 					},
-				}).Evaluate(map[string]interface{}{})
+				}).Evaluate(&map[string]interface{}{})
 			}
 		}
 		return nil, nil
 	}
-	DslFunctions["channelList"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["channelList"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		result := []string{}
 		for key, _ := range pubsubChannels {
 			result = append(result, key)
@@ -299,7 +299,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["request"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["request"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		if args[0].RawArg.(string) == "get" {
 			evaluated, err := args[1].Evaluate(container)
 			if err != err {
@@ -321,7 +321,7 @@ func init() {
 		}
 	}
 
-	DslFunctions["timer"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["timer"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		exitChannel := make(chan int)
 		go func() {
 			args[1].Evaluate(container)
@@ -342,7 +342,7 @@ func init() {
 	toUniqueSliceMap := map[string][]interface{}{}
 	toUniqueMapMap := map[string]map[interface{}]bool{}
 
-	DslFunctions["toUnique"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["toUnique"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		kind, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -375,8 +375,8 @@ func init() {
 		}
 		result := []interface{}{}
 		for index, value := range typedEvaluated {
-			container["item"] = value
-			container["index"] = index
+			(*container)["item"] = value
+			(*container)["index"] = index
 			childEv, childErr := args[1].Evaluate(container)
 			if childErr != nil {
 				return nil, err
@@ -391,12 +391,12 @@ func init() {
 			}
 		}
 		// TBD
-		delete(container, "item")
-		delete(container, "index")
+		delete((*container), "item")
+		delete((*container), "index")
 		return result, nil
 	}
 
-	DslFunctions["runYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["runYaml"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -406,7 +406,7 @@ func init() {
 		if yamlError != nil {
 			fmt.Println("unmarshal error:", err)
 		}
-		go NewArgument(objInput).Evaluate(map[string]interface{}{})
+		go NewArgument(objInput).Evaluate(&map[string]interface{}{})
 		return nil, nil
 	}
 }

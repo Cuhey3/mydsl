@@ -25,7 +25,7 @@ func TestForCoverage(t *testing.T) {
 		t.Fatalf("unmarshal error:%v", err)
 	}
 
-	container := map[string]interface{}{}
+	container := &map[string]interface{}{}
 	for _, testsuite := range testsuites {
 		evaluated, err := NewArgument(testsuite).Evaluate(container)
 		if err != nil {
@@ -51,7 +51,7 @@ func TestForTestsuite(t *testing.T) {
 		t.Fatalf("unmarshal error:%v", err)
 	}
 
-	container := map[string]interface{}{}
+	container := &map[string]interface{}{}
 	for _, testsuite := range testsuites {
 		evaluated, err := NewArgument(testsuite).Evaluate(container)
 		if err == nil {

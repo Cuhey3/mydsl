@@ -26,7 +26,7 @@ func init() {
 		return client.Database(dbname).Collection(collectionName)
 	}
 
-	DslFunctions["mongoGet"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		collectionName := args[0].RawArg.(string)
 		collection := MongoCollection(collectionName)
 		cur, err := collection.Find(ctx, bson.D{})
@@ -49,7 +49,7 @@ func init() {
 		return records, nil
 	}
 
-	DslFunctions["mongoInsert"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["mongoInsert"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		collectionName := args[0].RawArg.(string)
 		obj, err := args[1].Evaluate(container)
 		if err != nil {
@@ -63,7 +63,7 @@ func init() {
 		return res, nil
 	}
 
-	DslFunctions["mongoReplace"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["mongoReplace"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		collectionName := args[0].RawArg.(string)
 		obj, err := args[1].Evaluate(container)
 		if err != nil {

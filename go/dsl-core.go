@@ -98,7 +98,7 @@ var comparePattern = regexp.MustCompile(`^([-$~\d][^ ]*?) *(<=|>=|<|>) *([-$~\d]
 var firstValuePattern = regexp.MustCompile(`^([^\[ \]\.]+)\.?(.+)$`)
 var nextKeyPattern = regexp.MustCompile(`^(\[([^\[\]]+)\]|([^\[\] \.]+))\.?(.*)$`)
 var dollerReplacePattern = regexp.MustCompile(`^(\$\.?)`)
-var DslFunctions = map[string]func(map[string]interface{}, ...Argument) (interface{}, error){}
+var DslFunctions = map[string]func(*map[string]interface{}, ...Argument) (interface{}, error){}
 var DslAvailableFunctions = map[string]interface{}{}
 
 func isFunc(any interface{}) bool {
@@ -139,7 +139,7 @@ func propertyGet(parent interface{}, key interface{}) (interface{}, error) {
 	return nil, errors.New("propertyGet error: key type is invalid.")
 }
 
-func evaluateAll(args []Argument, container map[string]interface{}) ([]interface{}, error) {
+func evaluateAll(args []Argument, container *map[string]interface{}) ([]interface{}, error) {
 	evaluated := make([]interface{}, len(args))
 	for index, arg := range args {
 		evaluatedValue, err := arg.Evaluate(container)
@@ -152,11 +152,11 @@ func evaluateAll(args []Argument, container map[string]interface{}) ([]interface
 	return evaluated, nil
 }
 
-func getLastKeyValue(container map[string]interface{}, arg Argument, root map[string]interface{}) ([]interface{}, error) {
+func getLastKeyValue(container *map[string]interface{}, arg Argument, root map[string]interface{}) ([]interface{}, error) {
 	rawArg := arg.RawArg
 	rootIsNil := root == nil
 	if rootIsNil {
-		root = container
+		root = *container
 	}
 	switch rawArg.(type) {
 	case string:
@@ -196,12 +196,12 @@ func getLastKeyValue(container map[string]interface{}, arg Argument, root map[st
 						var nextKeyResult []interface{}
 						var err error
 						if arrayKeyStr != "" {
-							nextKeyResult, err = getLastKeyValue(root, Argument{arrayKeyStr}, nil)
+							nextKeyResult, err = getLastKeyValue(&root, Argument{arrayKeyStr}, nil)
 							if err != nil {
 								return nil, err
 							}
 						} else {
-							nextKeyResult, err = getLastKeyValue(root, Argument{periodKeyStr}, nil)
+							nextKeyResult, err = getLastKeyValue(&root, Argument{periodKeyStr}, nil)
 							if err != nil {
 								return nil, err
 							}
@@ -267,7 +267,7 @@ func asArray(any interface{}) []interface{} {
 	}
 }
 
-func (this Argument) Evaluate(container map[string]interface{}) (interface{}, error) {
+func (this Argument) Evaluate(container *map[string]interface{}) (interface{}, error) {
 	switch typedArg := this.RawArg.(type) {
 	case string:
 		if typedArg == "$" {
@@ -351,7 +351,7 @@ func (this Argument) Evaluate(container map[string]interface{}) (interface{}, er
 }
 
 func init() {
-	DslFunctions["print"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["print"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := evaluateAll(args, container)
 		if err == nil {
 			fmt.Println(evaluated...)
@@ -361,7 +361,7 @@ func init() {
 		}
 	}
 
-	DslFunctions["set"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["set"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[1].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -395,7 +395,7 @@ func init() {
 		}
 		return nil, nil
 	}
-	DslFunctions["get"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["get"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		var firstArg Argument
 		firstArg, args = args[0], args[1:]
 		lastKeyValue, err := getLastKeyValue(container, firstArg, nil)
@@ -404,9 +404,11 @@ func init() {
 			return nil, err
 		}
 		key := lastKeyValue[0]
+		parentValue := lastKeyValue[1]
+
+		// get default value
 		var defaultValue interface{}
 		defaultValue = nil
-		parentValue := lastKeyValue[1]
 		if len(args) > 0 {
 			_, ok := args[len(args)-1].RawArg.(string)
 			if !ok {
@@ -436,6 +438,8 @@ func init() {
 							switch typedParentValue := parentValue.(type) {
 							case map[string]interface{}:
 								cursor = typedParentValue[typedKey]
+							case *map[string]interface{}:
+								cursor = (*typedParentValue)[typedKey]
 							default:
 								cursor = parentValue.(map[interface{}]interface{})[typedKey]
 							}
@@ -470,7 +474,7 @@ func init() {
 		}
 		return nil, nil
 	}
-	DslFunctions["do"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["do"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		var firstArg Argument
 		firstArg, args = args[0], args[1:]
 		lastKeyValue, err := getLastKeyValue(container, firstArg, nil)
@@ -515,14 +519,15 @@ func init() {
 		}
 	}
 
-	DslFunctions["function"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		self := container
+	DslFunctions["function"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		// ブランクcontainerを使用するべき
+		self := *container
 		fixedArguments := map[interface{}]interface{}{}
 		argumentNames := args[0].RawArg
 		process := args[1]
 		if len(args) > 2 {
 			for _, fixedKey := range asArray(args[2].RawArg) {
-				evaluated, err := Argument{"$." + (fixedKey.(string))}.Evaluate(self)
+				evaluated, err := Argument{"$." + (fixedKey.(string))}.Evaluate(&self)
 				if err != nil {
 					return nil, err
 				}
@@ -538,7 +543,7 @@ func init() {
 			for k, v := range fixedArguments {
 				self[k.(string)] = v
 			}
-			result, err := process.Evaluate(self)
+			result, err := process.Evaluate(&self)
 			if err != nil {
 				//return nil, err
 				return err
@@ -548,8 +553,8 @@ func init() {
 			return result
 		}, nil
 	}
-	DslFunctions["forEach"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		_self := container
+	DslFunctions["forEach"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		_self := *container
 		any, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -562,12 +567,12 @@ func init() {
 		for index, value := range slice {
 			_self[key] = value
 			_self["index"] = index
-			args[1].Evaluate(_self)
+			args[1].Evaluate(&_self)
 		}
 		return nil, nil
 	}
-	DslFunctions["filter"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		_self := container
+	DslFunctions["filter"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		_self := *container
 		any, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -582,7 +587,7 @@ func init() {
 		for index, value := range slice {
 			_self[key] = value
 			_self["index"] = index
-			evaluated, err := args[1].Evaluate(_self)
+			evaluated, err := args[1].Evaluate(&_self)
 			if err != nil {
 				return nil, err
 			}
@@ -597,8 +602,8 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["map"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		_self := container
+	DslFunctions["map"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		_self := *container
 		any, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -613,7 +618,7 @@ func init() {
 		for index, value := range slice {
 			_self[key] = value
 			_self["index"] = index
-			evaluated, err := args[1].Evaluate(_self)
+			evaluated, err := args[1].Evaluate(&_self)
 			if err != nil {
 				return nil, err
 			}
@@ -631,7 +636,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["is"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["is"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		leftValueEvaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -656,7 +661,7 @@ func init() {
 		return leftValueEvaluated == rightValueEvaluated, nil
 	}
 
-	DslFunctions["not"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["not"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		result, err := DslFunctions["is"](container, args...)
 		if err != nil {
 			return nil, err
@@ -665,7 +670,7 @@ func init() {
 		}
 	}
 
-	DslFunctions["format"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["format"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		formatString := args[0].RawArg.(string)
 		args = args[1:]
 		for _, arg := range args {
@@ -678,11 +683,11 @@ func init() {
 		return formatString, nil
 	}
 
-	DslFunctions["sequence"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		if _, ok := container["seqArray"]; !ok {
-			container["seqArray"] = []interface{}{}
+	DslFunctions["sequence"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		if _, ok := (*container)["seqArray"]; !ok {
+			(*container)["seqArray"] = []interface{}{}
 		}
-		seqIndex := len(container["seqArray"].([]interface{}))
+		seqIndex := len((*container)["seqArray"].([]interface{}))
 		for _, arg := range args {
 			evaluated, err := arg.Evaluate(container)
 			if err != nil {
@@ -690,26 +695,26 @@ func init() {
 			}
 			if evaluated != nil {
 				//fmt.Println("sequence 1", arg, evaluated)
-				container["seq"] = evaluated
-				if len(container["seqArray"].([]interface{})) == seqIndex {
-					container["seqArray"] = append(container["seqArray"].([]interface{}), nil)
+				(*container)["seq"] = evaluated
+				if len((*container)["seqArray"].([]interface{})) == seqIndex {
+					(*container)["seqArray"] = append((*container)["seqArray"].([]interface{}), nil)
 				}
-				(container["seqArray"].([]interface{}))[seqIndex] = evaluated
+				((*container)["seqArray"].([]interface{}))[seqIndex] = evaluated
 			}
-			if exit, _ := container["exit"]; exit == true {
+			if exit, _ := (*container)["exit"]; exit == true {
 				break
 			}
 		}
-		container["seqArray"] = (container["seqArray"].([]interface{}))[0:seqIndex]
-		return container["seq"], nil
+		(*container)["seqArray"] = ((*container)["seqArray"].([]interface{}))[0:seqIndex]
+		return (*container)["seq"], nil
 	}
 
-	DslFunctions["exit"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-		container["exit"] = true
+	DslFunctions["exit"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		(*container)["exit"] = true
 		return nil, nil
 	}
 
-	DslFunctions["plus"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["plus"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := evaluateAll(args, container)
 		if err != err {
 			return nil, err
@@ -725,7 +730,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["minus"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["minus"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := evaluateAll(args, container)
 		if err != err {
 			return nil, err
@@ -746,7 +751,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["multiply"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["multiply"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := evaluateAll(args, container)
 		if err != err {
 			return nil, err
@@ -762,7 +767,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["divide"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["divide"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := evaluateAll(args, container)
 		if err != err {
 			return nil, err
@@ -783,7 +788,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["mod"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["mod"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := evaluateAll(args, container)
 		if err != err {
 			return nil, err
@@ -804,7 +809,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["compare"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["compare"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		var leftIntValue, rightIntValue int
 		leftEvaluated, err := args[1].Evaluate(container)
 		if err != err {
@@ -835,7 +840,7 @@ func init() {
 		return nil, nil
 	}
 
-	DslFunctions["parseYaml"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["parseYaml"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -848,11 +853,11 @@ func init() {
 		return objInput, nil
 	}
 
-	DslFunctions["now"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["now"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		return int(time.Now().UnixNano() / int64(time.Millisecond)), nil
 	}
 
-	DslFunctions["when"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["when"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		for len(args) > 0 {
 			evaluated, err := args[0].Evaluate(container)
 			if err != nil {
@@ -876,7 +881,7 @@ func init() {
 		return nil, errors.New(fmt.Sprintf("DslFunctions.when: no match (%v)", args))
 	}
 
-	DslFunctions["len"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["len"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -884,7 +889,7 @@ func init() {
 		return reflect.ValueOf(evaluated).Len(), nil
 	}
 
-	DslFunctions["reverse"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["reverse"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -901,7 +906,7 @@ func init() {
 		return result, nil
 	}
 
-	DslFunctions["regexp"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["regexp"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -917,7 +922,7 @@ func init() {
 		return compiled, nil
 	}
 
-	DslFunctions["in"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["in"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		evaluated, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -947,13 +952,13 @@ func init() {
 		return false, nil
 	}
 
-	DslFunctions["testsuite"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["testsuite"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		allCase := 0
 		passedCase := 0
 		failedCase := 0
 		hasErrorCase := 0
 		suiteName := args[0].RawArg
-		container["suiteName"] = suiteName
+		(*container)["suiteName"] = suiteName
 		args = args[1:]
 		result := []string{}
 		for _, arg := range args {
@@ -996,7 +1001,7 @@ func init() {
 		}
 	}
 
-	DslFunctions["testcase"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["testcase"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		testResult := map[string]interface{}{
 			"leftRaw":  args[0].RawArg,
 			"rightRaw": args[1].RawArg,
@@ -1017,7 +1022,7 @@ func init() {
 		return testResult, nil
 	}
 
-	DslFunctions["slice"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["slice"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		slice, err := args[0].Evaluate(container)
 		if err != nil {
 			return nil, err
@@ -1039,7 +1044,7 @@ func init() {
 		}
 	}
 
-	DslFunctions["and"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["and"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		if len(args) == 0 {
 			return false, nil
 		}
@@ -1061,7 +1066,7 @@ func init() {
 		return true, nil
 	}
 
-	DslFunctions["createSliceForTest"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+	DslFunctions["createSliceForTest"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		return make([]int, args[0].RawArg.(int)), nil
 	}
 }
