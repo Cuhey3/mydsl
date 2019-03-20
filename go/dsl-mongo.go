@@ -13,29 +13,40 @@ import (
 	"time"
 )
 
-var mongoDbnamePattern = regexp.MustCompile(`^mongodb://(.+?):`)
+type mongoUtil struct {
+	Collection func(collectionName string) *mongo.Collection
+	Context    context.Context
+}
 
-func init() {
+var sharedInstance *mongoUtil = newMongoUtil()
+
+func newMongoUtil() *mongoUtil {
 	mongodbUri := os.Getenv("MONGODB_URI")
-	dbname := mongoDbnamePattern.FindStringSubmatch(mongodbUri)[1]
+	dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubmatch(mongodbUri)[1]
 	uriOption := options.Client().ApplyURI(mongodbUri)
 	client, _ := mongo.NewClient(uriOption)
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
 	client.Connect(ctx)
-	MongoCollection := func(collectionName string) *mongo.Collection {
+	return &mongoUtil{func(collectionName string) *mongo.Collection {
 		return client.Database(dbname).Collection(collectionName)
-	}
+	}, ctx}
+}
 
+func MongoUtil() *mongoUtil {
+	return sharedInstance
+}
+
+func init() {
 	DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		collectionName := args[0].RawArg.(string)
-		collection := MongoCollection(collectionName)
-		cur, err := collection.Find(ctx, bson.D{})
+		collection := MongoUtil().Collection(collectionName)
+		cur, err := collection.Find(MongoUtil().Context, bson.D{})
 		if err != nil {
 			log.Fatal(err)
 		}
 		records := []map[string]interface{}{}
-		defer cur.Close(ctx)
-		for cur.Next(ctx) {
+		defer cur.Close(MongoUtil().Context)
+		for cur.Next(MongoUtil().Context) {
 			var result map[string]interface{}
 			err := cur.Decode(&result)
 			if err != nil {
@@ -55,8 +66,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		collection := MongoCollection(collectionName)
-		res, err := collection.InsertOne(ctx, obj)
+		collection := MongoUtil().Collection(collectionName)
+		res, err := collection.InsertOne(MongoUtil().Context, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -69,8 +80,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		collection := MongoCollection(collectionName)
-		res := collection.FindOneAndReplace(ctx, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
+		collection := MongoUtil().Collection(collectionName)
+		res := collection.FindOneAndReplace(MongoUtil().Context, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
 		return res, nil
 	}
 }

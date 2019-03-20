@@ -1161,65 +1161,76 @@ import (
         "time"
 )
 
-var mongoDbnamePattern = regexp.MustCompile(`^mongodb://(.+?):`)
+type mongoUtil struct {
+        Collection func(collectionName string) *mongo.Collection
+        Context    <span class="cov8" title="1">context.Context
+}
 
-func init() <span class="cov8" title="1">{
+var sharedInstance *mongoUtil = newMongoUtil()
+
+func newMongoUtil() *mongoUtil {
         mongodbUri := os.Getenv("MONGODB_URI")
-        dbname := mongoDbnamePattern.FindStringSubmatch(mongodbUri)[1]
+        dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubma</span><span class="cov0" title="0">tch(mongodbUri)[1]
         uriOption := options.Client().ApplyURI(mongodbUri)
-        client, _ := mongo.NewClient(uriOption)
+        c</span>lient, _ := mongo.NewClient(uriOption)
         ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
-        client.Connect(ctx)
-        MongoCollection := func(collectionName string) *mongo.Collection </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">client.Connect(ctx)
+</span>        return &amp;mongoUtil{func(collectionName string) *mongo.Collection {
                 return client.Database(dbname).Collection(collectionName)
-        }</span>
+        }, ctx}
+}
+</span>
+fun</span>c MongoUtil() *mongoUtil {
+        r<span class="cov0" title="0">eturn sharedInstance
+}
 
-        <span class="cov8" title="1">DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                collectionName := args[0].RawArg.(string)
-                collection := MongoCollection(collectionName)
-                cur, err := collection.Find(ctx, bson.D{})
-                if err != nil </span><span class="cov0" title="0">{
-                        log.Fatal(err)
-                }</span>
-                <span class="cov0" title="0">records := []map[string]interface{}{}
-                defer cur.Close(ctx)
-                for cur.Next(ctx) </span><span class="cov0" title="0">{
+</span>func init() {
+        DslFunctions["mongoGet"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+                collectionName </span><span class="cov0" title="0">:= args[0].RawArg.(string)
+                collection := MongoUtil().Collection(collectionName)
+                cu</span>r, err := collection.Find(MongoUtil().Context, bson.D{})
+                i<span class="cov0" title="0">f err != nil {
+</span>                        log.Fatal(err)
+                <span class="cov0" title="0">}
+</span>                records := []map[string]interface{}{}
+                d</span>efer cur.Close(MongoUtil().Context)
+                <span class="cov0" title="0">for cur.Next(MongoU</span>til().Context) {
                         var result map[string]interface{}
                         err := cur.Decode(&amp;result)
-                        if err != nil </span><span class="cov0" title="0">{
-                                log.Fatal(err)
-                        }</span>
-                        <span class="cov0" title="0">records = append(records, result)</span>
+        <span class="cov8" title="1">                if err != nil {
+</span>                                log.Fatal(err)
+                        }
+                        records = app</span><span class="cov0" title="0">end(records, result)
                 }
-                <span class="cov0" title="0">if err := cur.Err(); err != nil </span><span class="cov0" title="0">{
-                        log.Fatal(err)
-                }</span>
-                <span class="cov0" title="0">return records, nil</span>
+                i</span>f err := cur.Err(); err != nil {
+                <span class="cov0" title="0">        log.Fatal(err)
+                }
+                return records</span><span class="cov0" title="0">, nil
         }
 
-        <span class="cov8" title="1">DslFunctions["mongoInsert"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+</span>        D<span class="cov0" title="0">slFunctions["mo</span>ngoInsert"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
                 collectionName := args[0].RawArg.(string)
                 obj, err := args[1].Evaluate(container)
-                if err != nil </span><span class="cov0" title="0">{
-                        return nil, err
-                }</span>
-                <span class="cov0" title="0">collection := MongoCollection(collectionName)
-                res, err := collection.InsertOne(ctx, obj)
-                if err != nil </span><span class="cov0" title="0">{
-                        return nil, err
-                }</span>
-                <span class="cov0" title="0">return res, nil</span>
-        }
-
-        <span class="cov8" title="1">DslFunctions["mongoReplace"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
-                collectionName := args[0].RawArg.(string)
-                obj, err := args[1].Evaluate(container)
-                if err != nil </span><span class="cov0" title="0">{
-                        return nil, err
-                }</span>
-                <span class="cov0" title="0">collection := MongoCollection(collectionName)
-                res := collection.FindOneAndReplace(ctx, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
+        <span class="cov8" title="1">        if err != nil {
+</span>                        return nil, err
+                }
+                collection := </span><span class="cov0" title="0">MongoUtil().Collection(collectionName)
+                res, err := collection.InsertOne(MongoUtil().Context, obj)
+                i</span>f err != nil {
+                <span class="cov0" title="0">        return nil, err
+                }
                 return res, nil</span>
+        }
+
+        DslFunctions["mongoReplace"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+                collectionName := args[0].RawArg.(string)
+                obj, err := args[1].Evaluate(container)
+                if err != nil {
+                        return nil, err
+                }
+                collection := MongoUtil().Collection(collectionName)
+                res := collection.FindOneAndReplace(MongoUtil().Context, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
+                return res, nil
         }
 }
 </pre>
