@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
   name="mydsl",
   version="0.0.3",
-  install_requires=["aiohttp", "pymongo"],
+  install_requires=["aiohttp", "pymongo", "pyyaml"],
   extras_require={
   },
   entry_points={
