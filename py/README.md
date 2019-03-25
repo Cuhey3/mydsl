@@ -7,10 +7,10 @@ mydsl can replace your code with a YAML file.
 ### Install mydsl via pip
 
 ```
-sudo pip install -e git+https://github.com/cuhey3/mydsl.git#egg=mydsl\&subdirectory=py
+pip install -e git+https://github.com/cuhey3/mydsl.git#egg=mydsl\&subdirectory=py
 ```
 
-### usage
+### Usage
 
 ```
 from mydsl import dsl_core, dsl_mongo, dsl_server
