@@ -409,4 +409,12 @@ func init() {
 		go NewArgument(objInput).Evaluate(&map[string]interface{}{})
 		return nil, nil
 	}
+	DslFunctions["include"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		evaluated, err := args[0].Evaluate(container)
+		loadedYaml, err := LoadYaml(evaluated)
+		if err != nil {
+			return nil, err
+		}
+		return NewArgument(loadedYaml).Evaluate(container)
+	}
 }
