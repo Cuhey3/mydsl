@@ -1,0 +1,4 @@
+sequence:
+  - 2
+  - "$seq * 3"
+  - "$seq - 4"

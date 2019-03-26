@@ -56,9 +56,11 @@
 				
 				<option value="file0">github.com/cuhey3/mydsl/go/dsl-core.go (80.6%)</option>
 				
-				<option value="file1">github.com/cuhey3/mydsl/go/dsl-mongo.go (23.3%)</option>
+				<option value="file1">github.com/cuhey3/mydsl/go/dsl-mongo.go (22.7%)</option>
 				
-				<option value="file2">github.com/cuhey3/mydsl/go/dsl-server.go (9.4%)</option>
+				<option value="file2">github.com/cuhey3/mydsl/go/dsl-server.go (11.1%)</option>
+				
+				<option value="file3">github.com/cuhey3/mydsl/go/dsl-util.go (68.8%)</option>
 				
 				</select>
 			</div>
@@ -1163,74 +1165,74 @@ import (
 
 type mongoUtil struct {
         Collection func(collectionName string) *mongo.Collection
-        Context    <span class="cov8" title="1">context.Context
+        Context    context.Context
 }
 
 var sharedInstance *mongoUtil = newMongoUtil()
 
-func newMongoUtil() *mongoUtil {
+func newMongoUtil() *mongoUtil <span class="cov8" title="1">{
         mongodbUri := os.Getenv("MONGODB_URI")
-        dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubma</span><span class="cov0" title="0">tch(mongodbUri)[1]
+        dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubmatch(mongodbUri)[1]
         uriOption := options.Client().ApplyURI(mongodbUri)
-        c</span>lient, _ := mongo.NewClient(uriOption)
+        client, _ := mongo.NewClient(uriOption)
         ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
-        <span class="cov8" title="1">client.Connect(ctx)
-</span>        return &amp;mongoUtil{func(collectionName string) *mongo.Collection {
+        client.Connect(ctx)
+        return &amp;mongoUtil{func(collectionName string) *mongo.Collection </span><span class="cov0" title="0">{
                 return client.Database(dbname).Collection(collectionName)
-        }, ctx}
-}
-</span>
-fun</span>c MongoUtil() *mongoUtil {
-        r<span class="cov0" title="0">eturn sharedInstance
+        }</span>, ctx}
 }
 
-</span>func init() {
-        DslFunctions["mongoGet"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-                collectionName </span><span class="cov0" title="0">:= args[0].RawArg.(string)
+func MongoUtil() *mongoUtil <span class="cov0" title="0">{
+        return sharedInstance
+}</span>
+
+func init() <span class="cov8" title="1">{
+        DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                collectionName := args[0].RawArg.(string)
                 collection := MongoUtil().Collection(collectionName)
-                cu</span>r, err := collection.Find(MongoUtil().Context, bson.D{})
-                i<span class="cov0" title="0">f err != nil {
-</span>                        log.Fatal(err)
-                <span class="cov0" title="0">}
-</span>                records := []map[string]interface{}{}
-                d</span>efer cur.Close(MongoUtil().Context)
-                <span class="cov0" title="0">for cur.Next(MongoU</span>til().Context) {
+                cur, err := collection.Find(MongoUtil().Context, bson.D{})
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Fatal(err)
+                }</span>
+                <span class="cov0" title="0">records := []map[string]interface{}{}
+                defer cur.Close(MongoUtil().Context)
+                for cur.Next(MongoUtil().Context) </span><span class="cov0" title="0">{
                         var result map[string]interface{}
                         err := cur.Decode(&amp;result)
-        <span class="cov8" title="1">                if err != nil {
-</span>                                log.Fatal(err)
-                        }
-                        records = app</span><span class="cov0" title="0">end(records, result)
+                        if err != nil </span><span class="cov0" title="0">{
+                                log.Fatal(err)
+                        }</span>
+                        <span class="cov0" title="0">records = append(records, result)</span>
                 }
-                i</span>f err := cur.Err(); err != nil {
-                <span class="cov0" title="0">        log.Fatal(err)
-                }
-                return records</span><span class="cov0" title="0">, nil
+                <span class="cov0" title="0">if err := cur.Err(); err != nil </span><span class="cov0" title="0">{
+                        log.Fatal(err)
+                }</span>
+                <span class="cov0" title="0">return records, nil</span>
         }
 
-</span>        D<span class="cov0" title="0">slFunctions["mo</span>ngoInsert"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
+        <span class="cov8" title="1">DslFunctions["mongoInsert"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 collectionName := args[0].RawArg.(string)
                 obj, err := args[1].Evaluate(container)
-        <span class="cov8" title="1">        if err != nil {
-</span>                        return nil, err
-                }
-                collection := </span><span class="cov0" title="0">MongoUtil().Collection(collectionName)
-                res, err := collection.InsertOne(MongoUtil().Context, obj)
-                i</span>f err != nil {
-                <span class="cov0" title="0">        return nil, err
-                }
-                return res, nil</span>
-        }
-
-        DslFunctions["mongoReplace"] = func(container map[string]interface{}, args ...Argument) (interface{}, error) {
-                collectionName := args[0].RawArg.(string)
-                obj, err := args[1].Evaluate(container)
-                if err != nil {
+                if err != nil </span><span class="cov0" title="0">{
                         return nil, err
-                }
-                collection := MongoUtil().Collection(collectionName)
+                }</span>
+                <span class="cov0" title="0">collection := MongoUtil().Collection(collectionName)
+                res, err := collection.InsertOne(MongoUtil().Context, obj)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">return res, nil</span>
+        }
+
+        <span class="cov8" title="1">DslFunctions["mongoReplace"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                collectionName := args[0].RawArg.(string)
+                obj, err := args[1].Evaluate(container)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">collection := MongoUtil().Collection(collectionName)
                 res := collection.FindOneAndReplace(MongoUtil().Context, map[string]interface{}{"_id": (obj.(map[string]interface{}))["_id"]}, obj)
-                return res, nil
+                return res, nil</span>
         }
 }
 </pre>
@@ -1646,6 +1648,54 @@ func init() <span class="cov8" title="1">{
                 <span class="cov0" title="0">go NewArgument(objInput).Evaluate(&amp;map[string]interface{}{})
                 return nil, nil</span>
         }
+        <span class="cov8" title="1">DslFunctions["include"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov8" title="1">{
+                evaluated, err := args[0].Evaluate(container)
+                loadedYaml, err := LoadYaml(evaluated)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">return NewArgument(loadedYaml).Evaluate(container)</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package mydsl
+
+import (
+        "errors"
+        "fmt"
+        "gopkg.in/yaml.v2"
+        "io/ioutil"
+        "os"
+        "strings"
+)
+
+func LoadYaml(filename interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if strFilename, ok := filename.(string); ok </span><span class="cov8" title="1">{
+                if strings.HasSuffix(strFilename, ".yml") </span><span class="cov8" title="1">{
+                        // router.yml読み取り
+                        f, err := os.Open(strFilename)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">defer f.Close()
+                        yamlInput, err := ioutil.ReadAll(f)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">var parsedYaml interface{}
+                        yamlError := yaml.UnmarshalStrict(yamlInput, &amp;parsedYaml)
+                        if yamlError != nil </span><span class="cov0" title="0">{
+                                return nil, yamlError
+                        }</span> else<span class="cov8" title="1"> {
+                                return parsedYaml, nil
+                        }</span>
+                } else<span class="cov0" title="0"> {
+                        return nil, errors.New(fmt.Sprintf("include: 1st argument must be .yml file. %v", strFilename))
+                }</span>
+        } else<span class="cov0" title="0"> {
+                return nil, errors.New(fmt.Sprintf("include: 1st argument must be string. %v", filename))
+        }</span>
 }
 </pre>
 		

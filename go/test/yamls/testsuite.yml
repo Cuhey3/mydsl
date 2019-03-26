@@ -352,3 +352,10 @@
   - testcase:
     - $now1 <= $now2
     - true
+
+- testsuite:
+  - include test
+
+  - testcase:
+    - include: "test/yamls/include.yml"
+    - 2
