@@ -1,0 +1,10 @@
+- $router:
+    do: chi.NewRouter
+
+- static: public
+
+- print: server running...
+- do:
+  - http.ListenAndServe
+  - $PORT
+  - $router

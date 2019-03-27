@@ -13,6 +13,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	_ "reflect"
 	"regexp"
 	"strings"
@@ -416,5 +418,33 @@ func init() {
 			return nil, err
 		}
 		return NewArgument(loadedYaml).Evaluate(container)
+	}
+
+	DslFunctions["static"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
+		workDir, _ := os.Getwd()
+		rawPath, err := args[0].Evaluate(container)
+		if err != nil {
+			return nil, err
+		}
+		path := rawPath.(string)
+		filesDir := filepath.Join(workDir, path)
+		path = "/" + path
+		router := (*container)["router"].(*chi.Mux)
+		root := http.Dir(filesDir)
+		if strings.ContainsAny(path, "{}*") {
+			panic("FileServer does not permit URL parameters.")
+		}
+
+		fs := http.StripPrefix(path, http.FileServer(root))
+
+		if path != "/" && path[len(path)-1] != '/' {
+			router.Get(path, http.RedirectHandler(path+"/", 301).ServeHTTP)
+			path += "/"
+		}
+		path += "*"
+		router.Get(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fs.ServeHTTP(w, r)
+		}))
+		return nil, nil
 	}
 }

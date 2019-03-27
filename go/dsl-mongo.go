@@ -22,6 +22,9 @@ var sharedInstance *mongoUtil = newMongoUtil()
 
 func newMongoUtil() *mongoUtil {
 	mongodbUri := os.Getenv("MONGODB_URI")
+	if mongodbUri == "" {
+		return nil
+	}
 	dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubmatch(mongodbUri)[1]
 	uriOption := options.Client().ApplyURI(mongodbUri)
 	client, _ := mongo.NewClient(uriOption)
@@ -37,6 +40,10 @@ func MongoUtil() *mongoUtil {
 }
 
 func init() {
+	mongodbUri := os.Getenv("MONGODB_URI")
+	if mongodbUri == "" {
+		return
+	}
 	DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) {
 		collectionName := args[0].RawArg.(string)
 		collection := MongoUtil().Collection(collectionName)

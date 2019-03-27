@@ -1,6 +1,6 @@
 ## mydsl
 
-mydsl is yaml-based DSL library for JavaScript / Node.js / Go / Python.
+mydsl is yaml-based DSL library for JavaScript/Node.js/Go.
 
 mydsl can replace your code with a YAML file.
 
@@ -23,12 +23,6 @@ go test $GOPATH/src/mydsl/go -coverprofile=$GOPATH/src/mydsl/examples/public/cov
 #### convert .out to .html
 ```
 go tool cover -html=$GOPATH/src/github.com/cuhey3/mydsl/examples/public/cover.out -o $GOPATH/src/github.com/cuhey3/mydsl/examples/public/cover.html
-```
-
-or
-
-```
-go tool cover -html=$GOPATH/src/mydsl/examples/public/cover.out -o $GOPATH/src/mydsl/examples/public/cover.html
 ```
 
 #### start server to see coverage html

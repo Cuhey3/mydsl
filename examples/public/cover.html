@@ -54,13 +54,13 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/cuhey3/mydsl/go/dsl-core.go (80.6%)</option>
+				<option value="file0">mydsl/go/dsl-core.go (80.6%)</option>
 				
-				<option value="file1">github.com/cuhey3/mydsl/go/dsl-mongo.go (22.7%)</option>
+				<option value="file1">mydsl/go/dsl-mongo.go (26.5%)</option>
 				
-				<option value="file2">github.com/cuhey3/mydsl/go/dsl-server.go (11.1%)</option>
+				<option value="file2">mydsl/go/dsl-server.go (10.7%)</option>
 				
-				<option value="file3">github.com/cuhey3/mydsl/go/dsl-util.go (68.8%)</option>
+				<option value="file3">mydsl/go/dsl-util.go (68.8%)</option>
 				
 				</select>
 			</div>
@@ -1172,7 +1172,10 @@ var sharedInstance *mongoUtil = newMongoUtil()
 
 func newMongoUtil() *mongoUtil <span class="cov8" title="1">{
         mongodbUri := os.Getenv("MONGODB_URI")
-        dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubmatch(mongodbUri)[1]
+        if mongodbUri == "" </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">dbname := regexp.MustCompile(`^mongodb://(.+?):`).FindStringSubmatch(mongodbUri)[1]
         uriOption := options.Client().ApplyURI(mongodbUri)
         client, _ := mongo.NewClient(uriOption)
         ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
@@ -1187,7 +1190,11 @@ func MongoUtil() *mongoUtil <span class="cov0" title="0">{
 }</span>
 
 func init() <span class="cov8" title="1">{
-        DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+        mongodbUri := os.Getenv("MONGODB_URI")
+        if mongodbUri == "" </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov8" title="1">DslFunctions["mongoGet"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
                 collectionName := args[0].RawArg.(string)
                 collection := MongoUtil().Collection(collectionName)
                 cur, err := collection.Find(MongoUtil().Context, bson.D{})
@@ -1252,6 +1259,8 @@ import (
         "io/ioutil"
         "log"
         "net/http"
+        "os"
+        "path/filepath"
         _ "reflect"
         "regexp"
         "strings"
@@ -1655,6 +1664,34 @@ func init() <span class="cov8" title="1">{
                         return nil, err
                 }</span>
                 <span class="cov8" title="1">return NewArgument(loadedYaml).Evaluate(container)</span>
+        }
+
+        <span class="cov8" title="1">DslFunctions["static"] = func(container *map[string]interface{}, args ...Argument) (interface{}, error) </span><span class="cov0" title="0">{
+                workDir, _ := os.Getwd()
+                rawPath, err := args[0].Evaluate(container)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">path := rawPath.(string)
+                filesDir := filepath.Join(workDir, path)
+                path = "/" + path
+                router := (*container)["router"].(*chi.Mux)
+                root := http.Dir(filesDir)
+                if strings.ContainsAny(path, "{}*") </span><span class="cov0" title="0">{
+                        panic("FileServer does not permit URL parameters.")</span>
+                }
+
+                <span class="cov0" title="0">fs := http.StripPrefix(path, http.FileServer(root))
+
+                if path != "/" &amp;&amp; path[len(path)-1] != '/' </span><span class="cov0" title="0">{
+                        router.Get(path, http.RedirectHandler(path+"/", 301).ServeHTTP)
+                        path += "/"
+                }</span>
+                <span class="cov0" title="0">path += "*"
+                router.Get(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                        fs.ServeHTTP(w, r)
+                }</span>))
+                <span class="cov0" title="0">return nil, nil</span>
         }
 }
 </pre>
