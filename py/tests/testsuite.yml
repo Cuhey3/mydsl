@@ -1,0 +1,228 @@
+- testsuite:
+  - 'get test'
+  - $foo: bar
+  - $boo: {}
+  - $boo.woo: {}
+  - $boo.woo.soo: yoo
+  - $array:
+      get: [$no, exist, field, {slice: [[], 1]}]
+  - "$array[0]": array1
+
+  - testcase:
+    - get: [$boo, woo, soo]
+    - yoo
+
+  - testcase:
+    - $foo
+    - bar
+
+  - testcase:
+    - '$boo.woo.soo'
+    - yoo
+
+  - testcase:
+    - '$boo[woo][soo]'
+    - yoo
+
+  - testcase:
+    - "$array[0]"
+    - array1
+
+- testsuite:
+  - doller only test
+  - $foo: bar
+  
+  - testcase:
+    - sequence:
+      - $
+      - $seq.foo
+    - bar
+
+- testsuite:
+  - function and do test
+  - $func:
+      function:
+      - []
+      - foo
+  - $nested: {}
+  - $nested.func: $func
+  - $x: 5
+  - $y: 3
+  - $fixedFunc:
+      function:
+        - [a,b]
+        - sequence:
+          - $x * $y
+          - $seq - $a
+          - $seq / $b
+        - [x, "y"]
+  - testcase:
+    - do: $func
+    - foo
+
+  - testcase:
+    - do: [$nested, func]
+    - foo
+
+  - testcase:
+    - do:
+      - $fixedFunc
+      - 1
+      - 2
+    - 7
+
+- testsuite:
+  - forEach test
+  - $array: [1, 2, 3]
+  - $noArray: 3
+
+  - testcase:
+    - sequence:
+      - $result: 0
+      - forEach:
+        - $noArray
+        - $result: $result + $item
+      - $result
+    - 3
+
+
+  - testcase:
+    - sequence:
+      - $result: 0
+      - forEach:
+        - $array
+        - $result: $result + $item
+      - $result
+    - 6
+  
+  - testcase:
+    - sequence:
+      - $result: 0
+      - forEach:
+        - $array
+        - $result: $result + $customItemName
+        - customItemName
+      - $result
+    - 6
+  
+- testsuite:
+  - filter test
+  - $array: [1, 2, 3]
+  - $slice: [null]
+  - $slice: "$slice * 3"
+  - "$slice[0]": 1
+  - "$slice[1]": 2
+  - "$slice[2]": 3
+  
+  - testcase:
+    - sequence:
+      - $filtered:
+          filter:
+            - $array
+            - is:
+              - $item % 2
+              - 1
+      - len: $filtered
+    - 2
+  
+  - testcase:
+    - sequence:
+      - $filtered:
+          filter:
+            - $slice
+            - is:
+              - $item % 2
+              - 1
+      - len: $filtered
+    - 2
+  
+- testsuite:
+  - filter test
+  - $array: [1, 2, 3]
+
+  - testcase:
+    - sequence:
+      - $filtered:
+          filter:
+            - $array
+            - is:
+              - $customItemName % 2
+              - 1
+            - customItemName
+      - len: $filtered
+    - 2
+
+- testsuite:
+  - map test
+  - $array: [1, 2, 3]
+  
+  - testcase:
+    - sequence:
+      - $result: 0
+      - map:
+        - $array
+        - $customItemName * 3
+        - customItemName
+      - forEach:
+        - $seq
+        - $result: $result + $item
+      - $result
+    - 18
+
+
+- testsuite:
+  - is and not test
+  - $reg:
+      regexp: "[1-3]"
+
+  - testcase:
+    - is:
+      - $reg
+      - "2"
+    - true
+
+  - testcase:
+    - is:
+      - "4"
+      - $reg
+    - false
+
+  - testcase:
+    - not:
+      - $reg
+      - "2"
+    - false
+
+  - testcase:
+    - not:
+      - "4"
+      - $reg
+    - true
+
+- testsuite:
+  - format test
+
+  - testcase:
+    - format:
+      - "Hello, %s-san"
+      - cuhey3
+    - "Hello, cuhey3-san"
+
+  - testcase:
+    - format:
+      - "Hello, %s-san, good-bye"
+      - cuhey3
+      - good-bye
+    - "Hello, cuhey3-san, good-bye"
+
+- testsuite:
+  - exit test
+  - sequence:
+    - $result: 0
+    - $result: $result + 1
+    - exit:
+    - $result: $result + 1
+
+  - testcase:
+    - $result
+    - 1

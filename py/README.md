@@ -30,3 +30,9 @@ If you use dsl_mongo, you need a MONGODB_URI set of environment variables.
 ```
 export MONGODB_URI=mongodb://[username:password@]host1[:port1][,...hostN[:portN]]][/[database][?options]]
 ```
+
+## Testing
+
+```
+python -m pytest --capture=no -v --cov=mydsl --cov-report=html
+```

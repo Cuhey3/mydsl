@@ -4,12 +4,15 @@ import threading
 import time
 import yaml
 loop = asyncio.get_event_loop()
-
+type_re = type(re.compile(""))
 dslFunctions = {}
+
+calcPattern = re.compile(r'^([^\[\] ]+) +([-+*/%]) +([^\[\]]+)$')
 dollerReplacePattern = re.compile(r'^(\$\.?)')
 firstValuePattern = re.compile(r'^([^\[ \]\.]+)\.?(.+)$')
 nextKeyPattern = re.compile(r'^(\[([^\[\]]+)\]|([^\[\] \.]+))\.?(.*)$')
 dslAvailableFunctions = {}
+
 
 def evaluateAll(args, container):
     result = []
@@ -167,7 +170,10 @@ def _get(container, *args):
                 key, err = shiftArg.evaluate(container)
                 if err != None:
                     return None, err
-                cursor = cursor[key]
+                if isinstance(cursor, list):
+                    cursor = cursor[int(key)]
+                elif isinstance(cursor, dict):
+                    cursor = cursor[str(key)]
             if cursor == None and len(args) == 0:
                 return defaultValue, None
             return cursor, None
@@ -260,13 +266,13 @@ def _do(container, *args):
     else:
         return None, None
 
+
 def _sequence(container, *args):
     if not "seqArray" in container:
         container["seqArray"] = []
     seqIndex = len(container["seqArray"])
     for arg in args:
         evaluated, err = arg.evaluate(container)
-        print("sequence", evaluated, err)
         if err != None:
             return None, err
         if evaluated != None:
@@ -279,110 +285,292 @@ def _sequence(container, *args):
     container["seqArray"] = container["seqArray"][0:seqIndex]
     return container.get("seq"), None
 
-task = None
-def _asyncTest(container, *args):
-  async def sleeper(i):
-    await asyncio.sleep(i)
-  async def waiter():
-    while True:
-      await sleeper(1)
-      print("foo")
-  global task;
-  task = loop.create_task(waiter())
-  return task, None
 
-def _stopTest(container, *args):
-  global task;
-  task.cancel()
-  return None, None
+task = None
+
+
+def _asyncTest(container, *args):
+    async def sleeper(i):
+        await asyncio.sleep(i)
+
+    async def waiter():
+        while True:
+            await sleeper(1)
+            print("foo")
+
+    global task
+    task = loop.create_task(waiter())
+    return task, None
+
 
 def _now(container, *args):
-  return int(time.time()*1000), None
+    return int(time.time() * 1000), None
+
 
 def _format(container, *args):
-	formatString = args[0].rawArg()
-	args = args[1:]
-	for arg in args:
-		evaluated, err = arg.evaluate(container)
-		if err != None :
-			return None, err
-		formatString = formatString.replace("%s", str(evaluated), 1)
-	return formatString, None
+    formatString = args[0].rawArg()
+    args = args[1:]
+    for arg in args:
+        evaluated, err = arg.evaluate(container)
+        if err != None:
+            return None, err
+        formatString = formatString.replace("%s", str(evaluated), 1)
+    return formatString, None
+
 
 def _parseYaml(container, *args):
-	evaluated, err = args[0].evaluate(container)
-	if err != None:
-		return None, err
-	return yaml.load(evaluated), None
+    evaluated, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    return yaml.load(evaluated), None
+
 
 def _filter(container, *args):
-  _self = container
-  toFilter, err = args[0].evaluate(container)
-  if err != None :
-  	return None, err
-  key = "item"
-  if len(args) > 2 :
-  	key = args[2].rawArg()
-  result = []
-  toFilterSize = len(toFilter)
-  for index, value in enumerate(toFilter) :
-  	_self[key] = value
-  	_self["index"] = index
-  	evaluated, err = args[1].evaluate(_self)
-  	if err != None :
-  		return None, err
-  	if evaluated == True :
-  		result.append(value)
-  	if toFilterSize -1 == index :
-  		del _self[key]
-  		del _self["index"]
-  return result, None
+    _self = container
+    toFilter, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    key = "item"
+    if len(args) > 2:
+        key = args[2].rawArg()
+    result = []
+    toFilterSize = len(toFilter)
+    for index, value in enumerate(toFilter):
+        _self[key] = value
+        _self["index"] = index
+        evaluated, err = args[1].evaluate(_self)
+        if err != None:
+            return None, err
+        if evaluated == True:
+            result.append(value)
+        if toFilterSize - 1 == index:
+            del _self[key]
+            del _self["index"]
+    return result, None
+
 
 def _is(container, *args):
-	leftValueEvaluated, err = args[0].evaluate(container)
-	if err != None :
-		return None, err
-	rightValueEvaluated, err = args[1].evaluate(container)
-	if err != None :
-		return None, err
-	print("compare...", leftValueEvaluated, rightValueEvaluated, type(leftValueEvaluated), type(rightValueEvaluated))
-	return leftValueEvaluated == rightValueEvaluated, None
+    leftValueEvaluated, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    rightValueEvaluated, err = args[1].evaluate(container)
+    if err != None:
+        return None, err
+    # print("compare...", leftValueEvaluated, rightValueEvaluated,
+    #       type(leftValueEvaluated), type(rightValueEvaluated))
+    if type(leftValueEvaluated) == type_re and type(
+            rightValueEvaluated) == str:
+        return leftValueEvaluated.match(rightValueEvaluated) != None, None
+    elif type(rightValueEvaluated) == type_re and type(
+            leftValueEvaluated) == str:
+        return rightValueEvaluated.match(leftValueEvaluated) != None, None
+    else:
+        return leftValueEvaluated == rightValueEvaluated, None
+
 
 def _not(container, *args):
-  delegated, err = _is(container, *args)
-  if err != None :
-  	return None, err  
-  return not delegated, None
+    delegated, err = _is(container, *args)
+    if err != None:
+        return None, err
+    return not delegated, None
+
 
 def _when(container, *args):
-  while len(args) > 0 :
-  	evaluated, err = args[0].evaluate(container)
-  	if err != None :
-  		return None, err
-  	if not isinstance(evaluated, bool):
-  		return None, Exception("{}: {} is not bool type.".format(args[0].rawArg(), evaluated))
-  	else:
-  		if evaluated == True :
-  			sequence, err = args[1].evaluate(container)
-  			if err == None :
-  				return sequence, None
-  			else:
-  				return None, err
-  		else:
-  			args = args[2:]
-  return None, Exception("DslFunctions.when: no match ({})".format(args))
+    while len(args) > 0:
+        evaluated, err = args[0].evaluate(container)
+        if err != None:
+            return None, err
+        if not isinstance(evaluated, bool):
+            return None, Exception("{}: {} is not bool type.".format(
+                args[0].rawArg(), evaluated))
+        else:
+            if evaluated == True:
+                sequence, err = args[1].evaluate(container)
+                if err == None:
+                    return sequence, None
+                else:
+                    return None, err
+            else:
+                args = args[2:]
+    return None, Exception("DslFunctions.when: no match ({})".format(args))
+
 
 def _len(container, *args):
-	evaluated, err = args[0].evaluate(container)
-	if err != None :
-		return None, err
-	return len(evaluated), None
+    evaluated, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    return len(evaluated), None
+
 
 def _str(container, *args):
-	evaluated, err = args[0].evaluate(container)
-	if err != None :
-		return None, err
-	return str(evaluated), None
+    evaluated, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    return str(evaluated), None
+
+
+def _testsuite(container, *args):
+    allCase = 0
+    passedCase = 0
+    failedCase = 0
+    hasErrorCase = 0
+    suiteName = args[0].rawArg()
+    container["suiteName"] = suiteName
+    args = args[1:]
+    result = []
+    for arg in args:
+        outputFlag = False
+        evaluated, err = arg.evaluate(container)
+        if isinstance(arg.rawArg(), dict) and "testcase" in arg.rawArg():
+            allCase = allCase + 1
+            if isinstance(evaluated, dict):
+                if evaluated["passed"] == True:
+                    passedCase = passedCase + 1
+                else:
+                    failedCase = failedCase + 1
+                    outputFlag = True
+                    print("failed", suiteName, allCase)
+                    result.append("case {}".format(str(allCase)))
+            if err != None:
+                hasErrorCase = hasErrorCase + 1
+                outputFlag = True
+                result.append("{} {} has error".format(suiteName,
+                                                       str(allCase)))
+            if outputFlag:
+                print(suiteName, allCase)
+                print(evaluated)
+    if len(result) > 0:
+        return result, Exception("testsuite: {} was failed.".format(suiteName))
+    else:
+        return None, None
+
+
+def _testcase(container, *args):
+    testResult = {
+        "leftRaw": args[0].rawArg(),
+        "rightRaw": args[1].rawArg(),
+        "passed": False
+    }
+    evaluated1, err = args[0].evaluate(container)
+    if err != None:
+        return testResult, err
+    testResult["leftEvaluated"] = evaluated1
+    evaluated2, err = args[1].evaluate(container)
+    if err != None:
+        return testResult, None
+    testResult["rightEvaluated"] = evaluated2
+    testResult["passed"] = evaluated1 == evaluated2
+    return testResult, None
+
+
+def _plus(container, *args):
+    evaluated, err = evaluateAll(args, container)
+    if err != None:
+        return None, err
+    result = evaluated[0]
+    for value in evaluated[1:]:
+        result = result + int(value)
+    return result, None
+
+
+def _minus(container, *args):
+    evaluated, err = evaluateAll(args, container)
+    if err != None:
+        return None, err
+    result = evaluated[0]
+    for value in evaluated[1:]:
+        result = result - int(value)
+    return result, None
+
+
+def _multiply(container, *args):
+    evaluated, err = evaluateAll(args, container)
+    if err != None:
+        return None, err
+    result = evaluated[0]
+    # print(result, type(result))
+    for value in evaluated[1:]:
+        # print(value, type(value))
+        result = result * int(value)
+    return result, None
+
+
+def _divide(container, *args):
+    evaluated, err = evaluateAll(args, container)
+    if err != None:
+        return None, err
+    result = evaluated[0]
+    for value in evaluated[1:]:
+        result = result / int(value)
+    return result, None
+
+
+def _mod(container, *args):
+    evaluated, err = evaluateAll(args, container)
+    if err != None:
+        return None, err
+    result = evaluated[0]
+    for value in evaluated[1:]:
+        result = result % int(value)
+    return result, None
+
+
+def _forEach(container, *args):
+    _self = container
+    array, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    if not isinstance(array, list):
+        array = [array]
+    key = "item"
+    if len(args) > 2:
+        key = args[2].rawArg()
+    for index, value in enumerate(array):
+        _self[key] = value
+        _self["index"] = index
+        args[1].evaluate(_self)
+    return None, None
+
+
+def _map(container, *args):
+    _self = container
+    array, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    key = "item"
+    if len(args) > 2:
+        key = args[2].rawArg()
+    result = []
+    if not isinstance(array, list):
+        array = [array]
+    size = len(array)
+    for index, value in enumerate(array):
+        _self[key] = value
+        _self["index"] = index
+        evaluated, err = args[1].evaluate(_self)
+        if err != None:
+            return None, err
+        result.append(evaluated)
+        if size - 1 == index:
+            del _self[key]
+            del _self["index"]
+    return result, None
+
+
+def _regexp(container, *args):
+    evaluated, err = args[0].evaluate(container)
+    if err != None:
+        return None, err
+    if type(evaluated) != str:
+        return None, Exception(
+            "regexp 1st argument must be string. {}".format(evaluated))
+    return re.compile(evaluated), None
+
+
+def _exit(container, *args):
+    container["exit"] = True
+    return None, None
+
 
 dslFunctions["print"] = _print
 dslFunctions["get"] = _get
@@ -391,7 +579,6 @@ dslFunctions["function"] = _function
 dslFunctions["do"] = _do
 dslFunctions["sequence"] = _sequence
 dslFunctions["asyncTest"] = _asyncTest
-dslFunctions["stopTest"] = _stopTest
 dslFunctions["now"] = _now
 dslFunctions["format"] = _format
 dslFunctions["parseYaml"] = _parseYaml
@@ -401,6 +588,18 @@ dslFunctions["not"] = _not
 dslFunctions["when"] = _when
 dslFunctions["len"] = _len
 dslFunctions["str"] = _str
+dslFunctions["testsuite"] = _testsuite
+dslFunctions["testcase"] = _testcase
+dslFunctions["plus"] = _plus
+dslFunctions["minus"] = _minus
+dslFunctions["multiply"] = _multiply
+dslFunctions["divide"] = _divide
+dslFunctions["mod"] = _mod
+dslFunctions["forEach"] = _forEach
+dslFunctions["map"] = _map
+dslFunctions["regexp"] = _regexp
+dslFunctions["exit"] = _exit
+
 
 class Argument():
     __rawArg = None
@@ -415,11 +614,23 @@ class Argument():
         return self.__rawArg
 
     def evaluate(self, container):
-        print("evalaute start", self.__rawArg)
+        # print("evalaute start", self.__rawArg)
         t = type(self.__rawArg)
         if t is str:
             if self.__rawArg == "$":
                 return container, None
+            elif calcPattern.match(self.__rawArg):
+                match = calcPattern.match(self.__rawArg)
+                key = {
+                    "+": "plus",
+                    "-": "minus",
+                    "*": "multiply",
+                    "/": "divide",
+                    "%": "mod"
+                }.get(match[2], None)
+                if key != None:
+                    return dslFunctions[key](container, Argument(match[1]),
+                                             Argument(match[3]))
             elif self.__rawArg.startswith("$"):
                 return dslFunctions["get"](container, Argument(self.__rawArg))
             else:
@@ -427,7 +638,7 @@ class Argument():
         elif isinstance(self.__rawArg, list):
             result = []
             for arg in self.__rawArg:
-                print(arg)
+                # print(arg)
                 evaluatedValue, err = Argument(arg).evaluate(container)
                 if err != None:
                     return None, err
@@ -454,14 +665,14 @@ class Argument():
                                                Argument(
                                                    self.__rawArg[firstKey]))
                 else:
-                  return self.__rawArg, None # TBD
+                    return self.__rawArg, None  # TBD
             else:
-              evaluatedDict = {}
-              for key, value in self.__rawArg.items():
-                evaluated, err = Argument(value).evaluate(container)
-                if err != None:
-                  return None, err
-                evaluatedDict[key] = evaluated
-              return evaluatedDict, None  # TBD
+                evaluatedDict = {}
+                for key, value in self.__rawArg.items():
+                    evaluated, err = Argument(value).evaluate(container)
+                    if err != None:
+                        return None, err
+                    evaluatedDict[key] = evaluated
+                return evaluatedDict, None  # TBD
         else:
             return self.__rawArg, None
